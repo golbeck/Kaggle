@@ -1,3 +1,5 @@
+#initiaize with ipython -pylab
+
 import matplotlib.pyplot as plt
 #%matplotlib inline
 import numpy as np
@@ -15,8 +17,17 @@ df = pd.read_csv("data/train.csv")
 df = df.drop(['ticket','cabin'], axis=1) 
 df = df.dropna()
 
+#exploratory data analysis
+df.mean()
+df[df.survived==0].mean()
+df[df.survived==1].mean()
+df.describe()
+df.corr()
+################################################################################
+################################################################################
 # specifies the parameters of our graphs
 fig = plt.figure(figsize=(18,6))
+#alpha parameters control shading of plotted curves
 alpha=alpha_scatterplot = 0.2 
 alpha_bar_chart = 0.55
 
@@ -85,7 +96,8 @@ ax2 = fig.add_subplot(122)
 (df.survived[df.sex == 'male'].value_counts()/float(df.sex[df.sex == 'male'].size)).plot(kind='barh',label='Male')  
 (df.survived[df.sex == 'female'].value_counts()/float(df.sex[df.sex == 'female'].size)).plot(kind='barh', color='#FA2379',label='Female')
 ax2.set_ylim(-1, 2)
-plt.title("Who Survived proportionally? with respect to Gender"); plt.legend(loc='best')
+plt.title("Who Survived proportionally? with respect to Gender"); 
+plt.legend(loc='best')
 
 
 ################################################################################
@@ -103,7 +115,8 @@ female_highclass = df.survived[df.sex == 'female'][df.pclass != 3].value_counts(
 female_highclass.plot(kind='bar', label='female highclass', color='#FA2479', alpha=alpha_level)
 ax1.set_xticklabels(["Survived", "Died"], rotation=0)
 ax1.set_xlim(-1, len(female_highclass))
-plt.title("Who Survived? with respect to Gender and Class"); plt.legend(loc='best')
+plt.title("Who Survived? with respect to Gender and Class"); 
+plt.legend(loc='best')
 
 ax2=fig.add_subplot(142, sharey=ax1)
 female_lowclass = df.survived[df.sex == 'female'][df.pclass == 3].value_counts()
@@ -135,14 +148,23 @@ plt.legend(loc='best')
 formula = 'survived ~ C(pclass) + C(sex) + age + sibsp  + C(embarked)' 
 # create a results dictionary to hold our regression results for easy analysis later        
 results = {} 
-# create a regression freindly dataframe using patsy's dmatrices function
-y,x = dmatrices(formula, data=df, return_type='dataframe')
 
+# create a regression friendly dataframe using patsy's dmatrices function
+y,x = dmatrices(formula, data=df, return_type='dataframe')
 # instantiate our model
 model = sm.Logit(y,x)
-
 # fit our model to the training data
 res = model.fit()
+# save the result for outputing predictions later
+results['Logit'] = [res, formula]
+res.summary()
+
+# example with functions of regressors and interactions
+formula1='survived ~ C(pclass) + C(sex) + C(pclass):C(sex) + age + sibsp  + C(embarked) + I(age**2) + age : sibsp + np.log(age)'
+y1,x1 = dmatrices(formula1, data=df, return_type='dataframe')
+model1 = sm.Logit(y1,x1)
+res1 = model1.fit()
+res1.summary()
 
 # save the result for outputing predictions later
 results['Logit'] = [res, formula]
@@ -243,11 +265,11 @@ X = X[order]
 y = y[order].astype(np.float)
 
 # do a cross validation
-nighty_precent_of_sample = int(.9 * n_sample)
-X_train = X[:nighty_precent_of_sample]
-y_train = y[:nighty_precent_of_sample]
-X_test = X[nighty_precent_of_sample:]
-y_test = y[nighty_precent_of_sample:]
+ninety_precent_of_sample = int(.9 * n_sample)
+X_train = X[:ninety_precent_of_sample]
+y_train = y[:ninety_precent_of_sample]
+X_test = X[ninety_precent_of_sample:]
+y_test = y[ninety_precent_of_sample:]
 
 # create a list of the types of kerneks we will use for your analysis
 types_of_kernels = ['linear', 'rbf', 'poly']
