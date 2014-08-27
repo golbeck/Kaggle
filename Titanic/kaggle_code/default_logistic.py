@@ -38,6 +38,8 @@ result=logit.fit()
 print result.summary()
 #odds ratio components
 print np.exp(result.params)
+#model parameters
+beta=pd.DataFrame(result.params)
 
 
 #classify if prediction > 0.5
@@ -58,14 +60,6 @@ plt.ylabel('True label')
 plt.xlabel('Predicted label')
 plt.show()
 
-
-
-#plot the decision boundary for both 'student'=0 and 'student'=1
-categories = np.array(Ydf['default_Yes']).astype('int64')
-colormap = np.array(['r', 'g'])
-plt.figure()
-plt.scatter(Xdf['balance'], Xdf['income'], s=50, c=colormap[categories])
-plt.show()
 
 #for the plots, create arrays of outputs of the continuous predictor variables
 h=50.0
@@ -97,6 +91,51 @@ plt.legend(['1','0'], loc='upper left',title='student')
 plt.title("Prob(default) isolating balance and student status")
 plt.show()
 
+
+#plot the decision boundary for 'student'=1
+#create a dataframe of 'student' status and predicted default probabilities
+Xstudent=pd.DataFrame(Xdf['student'])
+Xstudent['df']=Y_out['df']
+#only use the predicted defaults if 'student'=1
+categories = np.array(Xstudent[Xstudent['student']==1.0]['df']).astype('int64')
+colormap = np.array(['r', 'g'])
+plt.figure()
+plt.scatter(Xdf[Xdf['student']==1.0]['balance'], Xdf[Xdf['student']==1.0]['income'], s=50, c=colormap[categories])
+#generate the points (balance,income) that corresponds to a zero log odds ratio. This is the decision boundary
+income_=-(beta.ix['intercept',0]+beta.ix['student',0]+beta.ix['balance',0]*balance_)/beta.ix['income',0]
+#plot the decision boundary
+plt.plot(balance_,income_)
+#axis labels
+plt.xlabel('balance')
+plt.ylabel('income')
+#set y and x axis boundaries
+plt.ylim((Xdf['income'].min(),Xdf['income'].max()))
+plt.xlim((Xdf['balance'].min(),Xdf['balance'].max()))
+plt.title("Classification for 'student'=1")
+plt.show()
+
+
+#plot the decision boundary for 'student'=0
+#create a dataframe of 'student' status and predicted default probabilities
+Xstudent=pd.DataFrame(Xdf['student'])
+Xstudent['df']=Y_out['df']
+#only use the predicted defaults if 'student'=0
+categories = np.array(Xstudent[Xstudent['student']==0.0]['df']).astype('int64')
+colormap = np.array(['r', 'g'])
+plt.figure()
+plt.scatter(Xdf[Xdf['student']==0.0]['balance'], Xdf[Xdf['student']==0.0]['income'], s=50, c=colormap[categories])
+#generate the points (balance,income) that corresponds to a zero log odds ratio. This is the decision boundary
+income_=-(beta.ix['intercept',0]+beta.ix['balance',0]*balance_)/beta.ix['income',0]
+#plot the decision boundary
+plt.plot(balance_,income_)
+#axis labels
+plt.xlabel('balance')
+plt.ylabel('income')
+#set y and x axis boundaries
+plt.ylim((Xdf['income'].min(),Xdf['income'].max()))
+plt.xlim((Xdf['balance'].min(),Xdf['balance'].max()))
+plt.title("Classification for 'student'=0")
+plt.show()
 
 
 #return the predicted probability of default for the mean balance level, 
