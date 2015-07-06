@@ -47,10 +47,10 @@ def load_data():
 
     frac=0.95
     n_train_set=int(0.95*n)
-    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),0])
+    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),])
     train_set_x, train_set_y = shared_dataset(train_set)
 
-    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),0])
+    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),])
     valid_set_x, valid_set_y = shared_dataset(valid_set)
 
     #normalize to intensities in [0,1]
@@ -60,20 +60,6 @@ def load_data():
     rval = [(train_set_x, train_set_y),(valid_set_x, valid_set_y), test_set_x]
     return rval
 
-####################################################################################
-####################################################################################
-####################################################################################
-def _dropout_from_layer(rng, layer, p):
-    """p is the probablity of dropping a unit
-    """
-    srng = theano.tensor.shared_randomstreams.RandomStreams(
-            rng.randint(999999))
-    # p=1-p because 1's indicate keep and p is prob of dropping
-    mask = srng.binomial(n=1, p=p, size=layer.shape)
-    # The cast is important because
-    # int * float32 = float64 which pulls things off the gpu
-    output = layer * T.cast(mask, theano.config.floatX)
-    return output
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -205,24 +191,13 @@ class HiddenLayer(object):
 ####################################################################################
 ####################################################################################
 ####################################################################################
-class DropoutHiddenLayer(HiddenLayer):
-    #hidden layer class with dropout applied to the output
-    def __init__(self, rng, input, n_in, n_out, p_in, W=None, b=None, activation=T.tanh):
-        super(DropoutHiddenLayer, self).__init__(
-            rng=rng, input=input, n_in=n_in, n_out=n_out, W=W, b=b, activation=activation)
-        #apply dropout to the output of the hidden layer
-        self.output = _dropout_from_layer(rng,self.output,p=p_in)
-####################################################################################
-####################################################################################
-####################################################################################
 class MLP(object):
     """convolutional neural network """
     ####################################################################################
-    def __init__(self, rng, input, batch_size, n_in,n_hidden, n_out, activation, p_dropout):
+    def __init__(self, rng, input, batch_size, n_in,n_hidden, n_out, activation):
 
 
         self.layers=[]
-        self.dropout_layers=[]
         # Construct the first convolutional pooling layer:
         # filtering reduces the image size to (28-5+1 , 28-5+1) = (24, 24)
         # maxpooling reduces this further to (24/2, 24/2) = (12, 12)
@@ -230,26 +205,9 @@ class MLP(object):
 
         #image inputs
         next_layer_input=input
-        #apply dropout to input images
-        p_in=p_dropout[0]
-        next_dropout_layer_input=_dropout_from_layer(rng,next_layer_input,p=p_in)
         count_layer=0
         for n_layer in range(len(n_hidden)):
             count_layer +=1
-            #dropout probability
-            p_last=p_in
-            p_in=p_dropout[n_layer+1]
-            #first construct the hidden layer with dropout
-            next_dropout_layer=DropoutHiddenLayer(
-                rng, 
-                input=next_dropout_layer_input, 
-                n_in=n_in,
-                n_out=n_hidden[n_layer],
-                p_in=p_in,
-                activation=activation
-            )
-            self.dropout_layers.append(next_dropout_layer)
-            next_dropout_layer_input=next_dropout_layer.output
 
             #hidden layer without dropout, and weights adjusted by dropout probability
             next_layer=HiddenLayer(
@@ -257,8 +215,6 @@ class MLP(object):
                 input=next_layer_input,
                 n_in=n_in,
                 n_out=n_hidden[n_layer],
-                W=next_dropout_layer.W*p_last,
-                b=next_dropout_layer.b,
                 activation=activation
             )
             self.layers.append(next_layer)
@@ -268,39 +224,28 @@ class MLP(object):
 
 
         count_layer +=1
-        #dropout probability
-        p_in=p_last
-        # classify the values of the fully-connected sigmoidal layer
-        Dropout_logRegressionLayer = LogisticRegression(
-                input=next_dropout_layer_input, 
-                n_in=n_in, 
-                n_out=n_out,
-        )
-        self.dropout_layers.append(Dropout_logRegressionLayer)
 
         # classify the values of the fully-connected sigmoidal layer
         logRegressionLayer = LogisticRegression(
                 input=next_layer_input, 
                 n_in=n_in, 
                 n_out=n_out,
-                W=Dropout_logRegressionLayer.W*p_last,
-                b=Dropout_logRegressionLayer.b
         )
 
         self.layers.append(logRegressionLayer)
         # L1 norm ; one regularization option is to enforce L1 norm to
         # be small
-        self.L1 = np.array([abs(self.dropout_layers[i].W).sum() for i in range(count_layer)]).sum()
+        self.L1 = np.array([abs(self.layers[i].W).sum() for i in range(count_layer)]).sum()
 
         # square of L2 norm ; one regularization option is to enforce
         # square of L2 norm to be small
-        self.L2_sqr = np.array([(self.dropout_layers[i].W ** 2).sum() for i in range(count_layer)]).sum()
+        self.L2_sqr = np.array([(self.layers[i].W ** 2).sum() for i in range(count_layer)]).sum()
 
         # the parameters of the model are the parameters of the two layer it is
         # made out of
 
         #list of lists [[W,b],[W,b],...]
-        self.params = [self.dropout_layers[i].params for i in range(count_layer)]
+        self.params = [self.layers[i].params for i in range(count_layer)]
         #single flat list [W,b,W,b,...]
         self.params = [item for sublist in self.params for item in sublist]
         # self.params = sum(self.params,[])
@@ -313,8 +258,6 @@ class MLP(object):
             init = np.zeros(param.get_value(borrow=True).shape,dtype=theano.config.floatX)
             self.updates[param] = theano.shared(init)
 
-        #outputs from dropout
-        self.dropout_p_y_given_x = self.dropout_layers[-1].p_y_given_x
         #outputs from network with dropout probability weighted parameters
         self.p_y_given_x = self.layers[-1].p_y_given_x
 
@@ -365,7 +308,7 @@ class MLP(object):
         # i.e., the mean log-likelihood across the minibatch.
 
         # use dropout network as this is minimized in training 
-        return -T.mean(T.log(self.dropout_p_y_given_x)[T.arange(y.shape[0]), y])
+        return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
         # end-snippet-2
 
     ####################################################################################
@@ -398,7 +341,7 @@ class TrainMLP(object):
                  learning_rate=0.1, rate_adj=0.40, n_epochs=100, L1_reg=0.00, 
                  L2_reg=0.00, learning_rate_decay=0.40,
                  activation='tanh',final_momentum=0.99, initial_momentum=0.5,
-                 momentum_epochs=400.0,batch_size=100,p_dropout=[0.9,0.5,0.5,0.5]):
+                 momentum_epochs=400.0,batch_size=100):
 
         #initialize the inputs (tunable parameters) and activations
         if rng is None:
@@ -424,7 +367,6 @@ class TrainMLP(object):
         self.final_momentum = float(final_momentum)
         self.momentum_epochs = int(momentum_epochs)
         self.batch_size=int(batch_size)
-        self.p_dropout=p_dropout
 
         #build the network
         self.ready()
@@ -449,7 +391,7 @@ class TrainMLP(object):
 
 
         self.MLP = MLP(rng=self.rng, input=self.x, batch_size=self.batch_size,n_in=self.n_in,
-                        n_hidden=self.n_hidden, n_out=self.n_out,activation=activation,p_dropout=self.p_dropout)
+                        n_hidden=self.n_hidden, n_out=self.n_out,activation=activation)
 
     ####################################################################################
     def _set_weights(self, weights):
@@ -478,23 +420,23 @@ class TrainMLP(object):
 
         #data used for the predictions
         datasets = load_data()
-        test_set_x = datasets[1]
+        test_set_x = datasets[2]
 
-        # compiling a Theano function that predicts the classes for a set of inputs
-        predict_model = theano.function(
-            inputs=[self.x],
-            outputs=self.MLP.predict_y()
+        ind = T.lscalar('ind')   
+
+        #output probabilities
+        prob_model = theano.function(
+            inputs=[ind],
+            outputs=self.MLP.probability_y(),
+            givens={
+                self.x: test_set_x[0:ind]
+                }
         )
 
-        test_predictions=predict_model(test_set_x)
-        columns = ['ImageId', 'Label']
-        index = range(1,test_predictions.shape[0]+1) # array of numbers for the number of samples
-        df = pd.DataFrame(columns=columns)
-        df['ImageId']=index
-        df['Label']=test_predictions
-        df.head(10)
-        df.to_csv("test_predictionsTheano_temp.csv",sep=",",index=False)
-
+        #for test set predictions, update batch size to the full set
+        n_test_set=test_set_x.get_value(borrow=True).shape[0]
+        test_probs=np.array(prob_model(n_test_set))
+        return test_probs
 
     ####################################################################################
     def fit(self,path,validation_frequency=10):
@@ -598,6 +540,7 @@ class TrainMLP(object):
                 }
         )
 
+
         ###############
         # TRAIN MODEL #
         ###############
@@ -610,7 +553,7 @@ class TrainMLP(object):
 
         tol=0.005
         improvement_threshold=1.0
-        patience_init=20
+        patience_init=70
         patience=patience_init
         # compute number of minibatches for training, validation and testing
         n_train_batches = train_set_x.get_value(borrow=True).shape[0] / self.batch_size
@@ -684,6 +627,7 @@ class TrainMLP(object):
         save_file.close()
         #set value of MLP params 
         self._set_weights(weights)
+        #for test set predictions, update batch size to the full set
         n_test_set=test_set_x.get_value(borrow=True).shape[0]
         test_probs=np.array(probability_model(n_test_set))
         print test_probs.shape
@@ -693,8 +637,8 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([1500,1000,800,300])
-    n_in = 20
+    n_hidden = np.array([400,200,100])
+    n_in = 10
     n_out = 39
     learning_rate=0.1
     rate_adj=0.60
@@ -703,11 +647,9 @@ def test_MLP():
     final_momentum=0.99
     initial_momentum=0.50
     momentum_epochs=100.0
-    n_epochs=400
+    n_epochs=150
     L1_reg=0.0
     L2_reg=0.0
-    p_hidden=[0.7]*len(n_hidden)
-    p_dropout=[0.9]+p_hidden
 
     rng = np.random.RandomState(2479)
     np.random.seed(0)
@@ -715,10 +657,11 @@ def test_MLP():
     model = TrainMLP(n_in=n_in, rng=rng, n_hidden=n_hidden, n_out=n_out, learning_rate=learning_rate, 
                  rate_adj=rate_adj, n_epochs=n_epochs, L1_reg=L1_reg, L2_reg=L2_reg, learning_rate_decay=learning_rate_decay,
                  activation='sigmoid',final_momentum=final_momentum, initial_momentum=initial_momentum,
-                 momentum_epochs=momentum_epochs,batch_size=batch_size,p_dropout=p_dropout)
+                 momentum_epochs=momentum_epochs,batch_size=batch_size)
 
-    path='params_MLP_dropout.zip'
-    model.fit(path=path,validation_frequency=5)
+    path='params_MLP.zip'
+    temp=model.fit(path=path,validation_frequency=5)
+    # temp=model.model_trained(path=path)
     return temp
 ####################################################################################
 ####################################################################################
@@ -752,4 +695,4 @@ if __name__ == "__main__":
     df=pd.DataFrame(temp,columns=columns)
     df.insert(loc=0,column='Id',value=range(len(df)))
     # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
-    df.to_csv("MLP_dropout_predictions_Theano.csv",sep=",",index=False)
+    df.to_csv("MLP_predictions_Theano.csv",sep=",",index=False)

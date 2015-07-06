@@ -47,10 +47,10 @@ def load_data():
 
     frac=0.95
     n_train_set=int(0.95*n)
-    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),0])
+    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),])
     train_set_x, train_set_y = shared_dataset(train_set)
 
-    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),0])
+    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),])
     valid_set_x, valid_set_y = shared_dataset(valid_set)
 
     #normalize to intensities in [0,1]
@@ -60,20 +60,6 @@ def load_data():
     rval = [(train_set_x, train_set_y),(valid_set_x, valid_set_y), test_set_x]
     return rval
 
-####################################################################################
-####################################################################################
-####################################################################################
-def _dropout_from_layer(rng, layer, p):
-    """p is the probablity of dropping a unit
-    """
-    srng = theano.tensor.shared_randomstreams.RandomStreams(
-            rng.randint(999999))
-    # p=1-p because 1's indicate keep and p is prob of dropping
-    mask = srng.binomial(n=1, p=p, size=layer.shape)
-    # The cast is important because
-    # int * float32 = float64 which pulls things off the gpu
-    output = layer * T.cast(mask, theano.config.floatX)
-    return output
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -132,175 +118,41 @@ class LogisticRegression(object):
 
         # parameters of the model
         self.params = [self.W, self.b]
-
 ####################################################################################
 ####################################################################################
 ####################################################################################
-class HiddenLayer(object):
-    ####################################################################################
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None,activation=T.tanh):
-        """
-        Typical hidden layer of a MLP: units are fully-connected and have
-        sigmoidal activation function. Weight matrix W is of shape (n_in,n_out)
-        and the bias vector b is of shape (n_out,).
-
-        NOTE : The nonlinearity used here is tanh
-
-        Hidden unit activation is given by: tanh(dot(input,W) + b)
-
-        :type rng: np.random.RandomState
-        :param rng: a random number generator used to initialize weights
-
-        :type input: theano.tensor.dmatrix
-        :param input: a symbolic tensor of shape (n_examples, n_in)
-
-        :type n_in: int
-        :param n_in: dimensionality of input
-
-        :type n_out: int
-        :param n_out: number of hidden units
-
-        :type activation: theano.Op or function
-        :param activation: Non linearity to be applied in the hidden
-                           layer
-        """
-        self.input = input
-        # end-snippet-1
-
-        # `W` is initialized with `W_values` which is uniformely sampled
-        # from sqrt(-6./(n_in+n_hidden)) and sqrt(6./(n_in+n_hidden))
-        # for tanh activation function
-        # the output of uniform if converted using asarray to dtype
-        # theano.config.floatX so that the code is runable on GPU
-        # Note : optimal initialization of weights is dependent on the
-        #        activation function used (among other things).
-        #        For example, results presented in [Xavier10] suggest that you
-        #        should use 4 times larger initial weights for sigmoid
-        #        compared to tanh
-        #        We have no info for other function, so we use the same as
-        #        tanh.
-        if W is None:
-            W_values = np.asarray(
-                rng.uniform(low=-np.sqrt(6. / (n_in + n_out)),high=np.sqrt(6. / (n_in + n_out)),size=(n_in, n_out)),
-                dtype=theano.config.floatX)
-            if activation == theano.tensor.nnet.sigmoid:
-                W_values *= 4
-
-            W = theano.shared(value=W_values, name='W', borrow=True)
-
-        if b is None:
-            b_values = np.zeros((n_out,), dtype=theano.config.floatX)
-            b = theano.shared(value=b_values, name='b', borrow=True)
-
-        self.W = W
-        self.b = b
-
-        lin_output = T.dot(input, self.W) + self.b
-        self.output = (
-            lin_output if activation is None
-            else activation(lin_output)
-        )
-        # parameters of the model
-        self.params = [self.W, self.b]
-####################################################################################
-####################################################################################
-####################################################################################
-class DropoutHiddenLayer(HiddenLayer):
-    #hidden layer class with dropout applied to the output
-    def __init__(self, rng, input, n_in, n_out, p_in, W=None, b=None, activation=T.tanh):
-        super(DropoutHiddenLayer, self).__init__(
-            rng=rng, input=input, n_in=n_in, n_out=n_out, W=W, b=b, activation=activation)
-        #apply dropout to the output of the hidden layer
-        self.output = _dropout_from_layer(rng,self.output,p=p_in)
-####################################################################################
-####################################################################################
-####################################################################################
-class MLP(object):
+class LogReg(object):
     """convolutional neural network """
     ####################################################################################
-    def __init__(self, rng, input, batch_size, n_in,n_hidden, n_out, activation, p_dropout):
+    def __init__(self, rng, input, batch_size, n_in, n_out):
 
 
         self.layers=[]
-        self.dropout_layers=[]
-        # Construct the first convolutional pooling layer:
-        # filtering reduces the image size to (28-5+1 , 28-5+1) = (24, 24)
-        # maxpooling reduces this further to (24/2, 24/2) = (12, 12)
-        # 4D output tensor is thus of shape (batch_size, n_kerns[0], 12, 12)
-
-        #image inputs
-        next_layer_input=input
-        #apply dropout to input images
-        p_in=p_dropout[0]
-        next_dropout_layer_input=_dropout_from_layer(rng,next_layer_input,p=p_in)
         count_layer=0
-        for n_layer in range(len(n_hidden)):
-            count_layer +=1
-            #dropout probability
-            p_last=p_in
-            p_in=p_dropout[n_layer+1]
-            #first construct the hidden layer with dropout
-            next_dropout_layer=DropoutHiddenLayer(
-                rng, 
-                input=next_dropout_layer_input, 
-                n_in=n_in,
-                n_out=n_hidden[n_layer],
-                p_in=p_in,
-                activation=activation
-            )
-            self.dropout_layers.append(next_dropout_layer)
-            next_dropout_layer_input=next_dropout_layer.output
-
-            #hidden layer without dropout, and weights adjusted by dropout probability
-            next_layer=HiddenLayer(
-                rng,
-                input=next_layer_input,
-                n_in=n_in,
-                n_out=n_hidden[n_layer],
-                W=next_dropout_layer.W*p_last,
-                b=next_dropout_layer.b,
-                activation=activation
-            )
-            self.layers.append(next_layer)
-            next_layer_input=next_layer.output
-            #update input dimension
-            n_in=n_hidden[n_layer]
-
 
         count_layer +=1
-        #dropout probability
-        p_in=p_last
-        # classify the values of the fully-connected sigmoidal layer
-        Dropout_logRegressionLayer = LogisticRegression(
-                input=next_dropout_layer_input, 
-                n_in=n_in, 
-                n_out=n_out,
-        )
-        self.dropout_layers.append(Dropout_logRegressionLayer)
 
         # classify the values of the fully-connected sigmoidal layer
         logRegressionLayer = LogisticRegression(
-                input=next_layer_input, 
+                input=input, 
                 n_in=n_in, 
                 n_out=n_out,
-                W=Dropout_logRegressionLayer.W*p_last,
-                b=Dropout_logRegressionLayer.b
         )
 
         self.layers.append(logRegressionLayer)
         # L1 norm ; one regularization option is to enforce L1 norm to
         # be small
-        self.L1 = np.array([abs(self.dropout_layers[i].W).sum() for i in range(count_layer)]).sum()
+        self.L1 = np.array([abs(self.layers[i].W).sum() for i in range(count_layer)]).sum()
 
         # square of L2 norm ; one regularization option is to enforce
         # square of L2 norm to be small
-        self.L2_sqr = np.array([(self.dropout_layers[i].W ** 2).sum() for i in range(count_layer)]).sum()
+        self.L2_sqr = np.array([(self.layers[i].W ** 2).sum() for i in range(count_layer)]).sum()
 
         # the parameters of the model are the parameters of the two layer it is
         # made out of
 
         #list of lists [[W,b],[W,b],...]
-        self.params = [self.dropout_layers[i].params for i in range(count_layer)]
+        self.params = [self.layers[i].params for i in range(count_layer)]
         #single flat list [W,b,W,b,...]
         self.params = [item for sublist in self.params for item in sublist]
         # self.params = sum(self.params,[])
@@ -313,13 +165,10 @@ class MLP(object):
             init = np.zeros(param.get_value(borrow=True).shape,dtype=theano.config.floatX)
             self.updates[param] = theano.shared(init)
 
-        #outputs from dropout
-        self.dropout_p_y_given_x = self.dropout_layers[-1].p_y_given_x
-        #outputs from network with dropout probability weighted parameters
+        #outputs 
         self.p_y_given_x = self.layers[-1].p_y_given_x
 
         # compute prediction as class whose probability is maximal
-        # generate predictions for validation set, which uses the dropout probability weighted parameters
         self.y_out = T.argmax(self.p_y_given_x, axis=-1)
 
         # loss function uses
@@ -365,7 +214,7 @@ class MLP(object):
         # i.e., the mean log-likelihood across the minibatch.
 
         # use dropout network as this is minimized in training 
-        return -T.mean(T.log(self.dropout_p_y_given_x)[T.arange(y.shape[0]), y])
+        return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
         # end-snippet-2
 
     ####################################################################################
@@ -389,16 +238,15 @@ class MLP(object):
 ####################################################################################
 ####################################################################################
 ####################################################################################
-class TrainMLP(object):
+class TrainLogReg(object):
     """
-        builds a MLP and trains the network
+        builds a LogReg and trains the network
     """
     ####################################################################################
-    def __init__(self, n_in=5, rng=None, n_hidden=np.array([50,50]), n_out=5, 
+    def __init__(self, n_in=5, rng=None, n_out=5, 
                  learning_rate=0.1, rate_adj=0.40, n_epochs=100, L1_reg=0.00, 
-                 L2_reg=0.00, learning_rate_decay=0.40,
-                 activation='tanh',final_momentum=0.99, initial_momentum=0.5,
-                 momentum_epochs=400.0,batch_size=100,p_dropout=[0.9,0.5,0.5,0.5]):
+                 L2_reg=0.00, learning_rate_decay=0.40,final_momentum=0.99, initial_momentum=0.5,
+                 momentum_epochs=400.0,batch_size=100):
 
         #initialize the inputs (tunable parameters) and activations
         if rng is None:
@@ -408,8 +256,6 @@ class TrainMLP(object):
 
         #np array [width,height] pixel dims
         self.n_in = n_in
-        #number of neurons in each hidden layer
-        self.n_hidden = n_hidden
         #number of classes
         self.n_out = int(n_out)
 
@@ -419,12 +265,10 @@ class TrainMLP(object):
         self.n_epochs = int(n_epochs)
         self.L1_reg = float(L1_reg)
         self.L2_reg = float(L2_reg)
-        self.activation = activation
         self.initial_momentum = float(initial_momentum)
         self.final_momentum = float(final_momentum)
         self.momentum_epochs = int(momentum_epochs)
         self.batch_size=int(batch_size)
-        self.p_dropout=p_dropout
 
         #build the network
         self.ready()
@@ -436,20 +280,8 @@ class TrainMLP(object):
         # target 
         self.y = T.vector(name='y', dtype='int32')
 
-        if self.activation == 'tanh':
-            activation = T.tanh
-        elif self.activation == 'sigmoid':
-            activation = T.nnet.sigmoid
-        elif self.activation == 'relu':
-            activation = lambda x: x * (x > 0)
-        elif self.activation == 'cappedrelu':
-            activation = lambda x: T.minimum(x * (x > 0), 6)
-        else:
-            raise NotImplementedError
 
-
-        self.MLP = MLP(rng=self.rng, input=self.x, batch_size=self.batch_size,n_in=self.n_in,
-                        n_hidden=self.n_hidden, n_out=self.n_out,activation=activation,p_dropout=self.p_dropout)
+        self.LogReg = LogReg(rng=self.rng, input=self.x, batch_size=self.batch_size,n_in=self.n_in,n_out=self.n_out)
 
     ####################################################################################
     def _set_weights(self, weights):
@@ -459,7 +291,7 @@ class TrainMLP(object):
         """
         i = iter(weights)
 
-        for param in self.MLP.params:
+        for param in self.LogReg.params:
             param.set_value(i.next().get_value(borrow=True))
 
 
@@ -473,7 +305,7 @@ class TrainMLP(object):
         save_file = open(path)
         weights=cPickle.load(save_file)
         save_file.close()
-        #set value of MLP params using trained parameters
+        #set value of LogReg params using trained parameters
         self._set_weights(weights)
 
         #data used for the predictions
@@ -483,17 +315,19 @@ class TrainMLP(object):
         # compiling a Theano function that predicts the classes for a set of inputs
         predict_model = theano.function(
             inputs=[self.x],
-            outputs=self.MLP.predict_y()
+            outputs=self.LogReg.predict_y()
         )
 
         test_predictions=predict_model(test_set_x)
-        columns = ['ImageId', 'Label']
-        index = range(1,test_predictions.shape[0]+1) # array of numbers for the number of samples
-        df = pd.DataFrame(columns=columns)
-        df['ImageId']=index
-        df['Label']=test_predictions
-        df.head(10)
-        df.to_csv("test_predictionsTheano_temp.csv",sep=",",index=False)
+
+        return test_predictions
+        # columns = ['ImageId', 'Label']
+        # index = range(1,test_predictions.shape[0]+1) # array of numbers for the number of samples
+        # df = pd.DataFrame(columns=columns)
+        # df['ImageId']=index
+        # df['Label']=test_predictions
+        # df.head(10)
+        # df.to_csv("test_predictionsTheano_temp.csv",sep=",",index=False)
 
 
     ####################################################################################
@@ -525,15 +359,15 @@ class TrainMLP(object):
 
         #the cost function used for grad descent
         cost = (
-            self.MLP.negative_log_likelihood(self.y)
-            + self.L1_reg * self.MLP.L1
-            + self.L2_reg * self.MLP.L2_sqr
+            self.LogReg.negative_log_likelihood(self.y)
+            + self.L1_reg * self.LogReg.L1
+            + self.L2_reg * self.LogReg.L2_sqr
         )
 
         #given training data, compute the error
         compute_train_error = theano.function(
                 inputs=[index],
-                outputs=self.MLP.errors(self.y),
+                outputs=self.LogReg.errors(self.y),
                 givens={
                     self.x: train_set_x[index * self.batch_size: (index + 1) * self.batch_size],
                     self.y: train_set_y[index * self.batch_size: (index + 1) * self.batch_size]
@@ -543,7 +377,7 @@ class TrainMLP(object):
         #given training data, compute the error
         compute_valid_error = theano.function(
                 inputs=[index],
-                outputs=self.MLP.errors(self.y),
+                outputs=self.LogReg.errors(self.y),
                 givens={
                     self.x: valid_set_x[index * self.batch_size: (index + 1) * self.batch_size],
                     self.y: valid_set_y[index * self.batch_size: (index + 1) * self.batch_size]
@@ -553,19 +387,19 @@ class TrainMLP(object):
         # compute the gradient of cost with respect to theta = (W, W_in, W_out)
         # gradients on the weights using BPTT
         gparams = []
-        for param in self.MLP.params:
+        for param in self.LogReg.params:
             gparam = T.grad(cost, param)
             gparams.append(gparam)
 
         #apply the updates using the gradients and previous updates
         updates=[]
-        for param, gparam in zip(self.MLP.params, gparams):
+        for param, gparam in zip(self.LogReg.params, gparams):
             #update from last iteration
-            weight_update = self.MLP.updates[param]
+            weight_update = self.LogReg.updates[param]
             #current update with momentum
             upd = mom * weight_update - l_r * gparam
             #update the weight parameters and their grad descent updates
-            updates.append((self.MLP.updates[param],upd))
+            updates.append((self.LogReg.updates[param],upd))
             updates.append((param,param + upd))
 
         # compiling a Theano function `train_model` that returns the
@@ -583,7 +417,7 @@ class TrainMLP(object):
         # compiling a Theano function that predicts the classes for a set of inputs
         predict_model = theano.function(
             inputs=[index],
-            outputs=self.MLP.predict_y(),
+            outputs=self.LogReg.predict_y(),
             givens={
                 self.x: test_set_x[index * self.batch_size: (index + 1) * self.batch_size]
                 }
@@ -592,7 +426,7 @@ class TrainMLP(object):
         #output probabilities
         probability_model = theano.function(
             inputs=[index],
-            outputs=self.MLP.probability_y(),
+            outputs=self.LogReg.probability_y(),
             givens={
                 self.x: test_set_x[0:index]
                 }
@@ -610,7 +444,7 @@ class TrainMLP(object):
 
         tol=0.005
         improvement_threshold=1.0
-        patience_init=20
+        patience_init=10
         patience=patience_init
         # compute number of minibatches for training, validation and testing
         n_train_batches = train_set_x.get_value(borrow=True).shape[0] / self.batch_size
@@ -642,7 +476,7 @@ class TrainMLP(object):
                             patience += validation_frequency
                         #save parameters if best performance
                         save_file = open(path, 'wb')  # this will overwrite current contents
-                        cPickle.dump(self.MLP.params, save_file, -1)  # the -1 is for HIGHEST_PROTOCOL and it triggers much more efficient storage than np's default
+                        cPickle.dump(self.LogReg.params, save_file, -1)  # the -1 is for HIGHEST_PROTOCOL and it triggers much more efficient storage than np's default
                         save_file.close()
 
                     best_valid_loss = this_valid_loss
@@ -682,44 +516,76 @@ class TrainMLP(object):
         save_file = open(path)
         weights=cPickle.load(save_file)
         save_file.close()
-        #set value of MLP params 
+        #set value of LogReg params 
         self._set_weights(weights)
+        #for test set predictions, update batch size to the full set
         n_test_set=test_set_x.get_value(borrow=True).shape[0]
         test_probs=np.array(probability_model(n_test_set))
         print test_probs.shape
+        # test_probs=test_probs.reshape(test_probs.shape[0]*test_probs.shape[1],test_probs.shape[2])
+
         return test_probs
+        # print test_probs.shape()
+        #use this for output matrix
+        # columns=['ARSON', 'ASSAULT', 'BAD CHECKS', 'BRIBERY',
+        #             'BURGLARY', 'DISORDERLY CONDUCT',
+        #             'DRIVING UNDER THE INFLUENCE', 'DRUG/NARCOTIC',
+        #             'DRUNKENNESS', 'EMBEZZLEMENT', 'EXTORTION',
+        #             'FAMILY OFFENSES', 'FORGERY/COUNTERFEITING', 'FRAUD',
+        #             'GAMBLING', 'KIDNAPPING', 'LARCENY/THEFT',
+        #             'LIQUOR LAWS', 'LOITERING', 'MISSING PERSON',
+        #             'NON-CRIMINAL', 'OTHER OFFENSES',
+        #             'PORNOGRAPHY/OBSCENE MAT', 'PROSTITUTION',
+        #             'RECOVERED VEHICLE', 'ROBBERY', 'RUNAWAY',
+        #             'SECONDARY CODES', 'SEX OFFENSES FORCIBLE',
+        #             'SEX OFFENSES NON FORCIBLE', 'STOLEN PROPERTY',
+        #             'SUICIDE', 'SUSPICIOUS OCC', 'TREA', 'TRESPASS',
+        #             'VANDALISM', 'VEHICLE THEFT', 'WARRANTS',
+        #             'WEAPON LAWS']
+        # df = pd.DataFrame(columns=['Id']+columns)
+        # df[columns]=test_probs
+        # index = range(1,len(df)+1) # array of numbers for the number of samples
+        # df['Id']=index
+        # df.head(10)
+        # np.savetxt("LogReg_predictions_Theano.gz", df, delimiter=",")
+        # df.to_csv("LogReg_predictions_Theano.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-def test_MLP():
-    """ Test MLP. """
-    n_hidden = np.array([1500,1000,800,300])
-    n_in = 20
+def test_LogReg():
+    """ Test LogReg. """
+    n_in = 10
     n_out = 39
     learning_rate=0.1
-    rate_adj=0.60
-    learning_rate_decay=0.99
-    batch_size=200
+    rate_adj=1.0
+    learning_rate_decay=0.999
+    batch_size=500
     final_momentum=0.99
     initial_momentum=0.50
-    momentum_epochs=100.0
-    n_epochs=400
+    momentum_epochs=400.0
+    n_epochs=2000
     L1_reg=0.0
     L2_reg=0.0
-    p_hidden=[0.7]*len(n_hidden)
-    p_dropout=[0.9]+p_hidden
 
     rng = np.random.RandomState(2479)
     np.random.seed(0)
 
-    model = TrainMLP(n_in=n_in, rng=rng, n_hidden=n_hidden, n_out=n_out, learning_rate=learning_rate, 
+    model = TrainLogReg(n_in=n_in, rng=rng, n_out=n_out, learning_rate=learning_rate, 
                  rate_adj=rate_adj, n_epochs=n_epochs, L1_reg=L1_reg, L2_reg=L2_reg, learning_rate_decay=learning_rate_decay,
-                 activation='sigmoid',final_momentum=final_momentum, initial_momentum=initial_momentum,
-                 momentum_epochs=momentum_epochs,batch_size=batch_size,p_dropout=p_dropout)
+                 final_momentum=final_momentum, initial_momentum=initial_momentum,
+                 momentum_epochs=momentum_epochs,batch_size=batch_size)
 
-    path='params_MLP_dropout.zip'
-    model.fit(path=path,validation_frequency=5)
+    path='params_LogReg.zip'
+    temp=model.fit(path=path,validation_frequency=5)
     return temp
+    # model_fit = TrainLogReg(n_in=n_in, rng=rng, n_hidden=n_hidden, n_out=n_out,
+    #                 L1_reg=0.00, L2_reg=0.00,
+    #                 learning_rate=0.1, learning_rate_decay=0.99, rate_adj=0.5,                    
+    #                 final_momentum=0.99, initial_momentum=0.5,momentum_epochs=200.0,
+    #                 n_epochs=40, activation='sigmoid',batch_size=batch_size)
+
+    # path='params.zip'
+    # model_fit.model_trained(path=path)
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -731,7 +597,8 @@ if __name__ == "__main__":
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)
-    temp=test_MLP()
+    temp=test_LogReg()
+
 
     columns=['ARSON', 'ASSAULT', 'BAD CHECKS', 'BRIBERY',
                 'BURGLARY', 'DISORDERLY CONDUCT',
@@ -751,5 +618,5 @@ if __name__ == "__main__":
     df = pd.DataFrame(columns=['Id']+columns)
     df=pd.DataFrame(temp,columns=columns)
     df.insert(loc=0,column='Id',value=range(len(df)))
-    # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
-    df.to_csv("MLP_dropout_predictions_Theano.csv",sep=",",index=False)
+    np.savetxt("LogReg_predictions_Theano.csv.gz", df, delimiter=",")
+    df.to_csv("LogReg_predictions_Theano.csv",sep=",",index=False)

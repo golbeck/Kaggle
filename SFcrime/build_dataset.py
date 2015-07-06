@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 
 pwd_temp=os.getcwd()
-dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-# dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+# dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -47,12 +47,22 @@ time_of_day/=86400.0
 # time_of_day=pd.to_datetime(time_of_day)
 
 #normalize X and Y coordinates to [0,1]
-dat['Y']-=37.0
-dat['X']-=-120.0
-dat['X']/=3.0
+y_min=dat['Y'].min()
+y_max=dat['Y'].max()
+x_min=dat['X'].min()
+x_max=dat['X'].max()
+
+
+dat['Y']-=y_min-0.01
+dat['Y']/=(y_max-y_min+0.011)
+dat['X']-=x_max+0.01
+dat['X']/=(x_min-x_max-0.011)
+
+print dat['X'].max(), dat['X'].min()
+print dat['Y'].max(), dat['Y'].min()
 
 #create matrix of features
-X_train=np.column_stack((time_of_day,weekday_cat,district_cat,dat['X'],dat['Y']))
+X_train=np.column_stack((time_of_day,dat['X'],dat['Y'],weekday_cat))
 #create output labels array
 Y_train=pd.Categorical(dat['Category']).labels
 #################################################################################
@@ -63,10 +73,10 @@ Y_train=pd.Categorical(dat['Category']).labels
 dat=pd.io.parsers.read_table('test.csv',sep=',',header=0)
 
 #get indices of all outlier Y values
-n_90=np.count_nonzero(dat['Y']>40.0)
-indices_max=dat['Y'].argsort()[-n_90:]
-#delete rows with outlider values
-dat=dat.drop(indices_max)
+# n_90=np.count_nonzero(dat['Y']>40.0)
+# indices_max=dat['Y'].argsort()[-n_90:]
+# #delete rows with outlider values
+# dat=dat.drop(indices_max)
 
 #convert categories to 0-1 indicator matrix
 # crime_cat=pd.get_dummies(dat['Category'])
@@ -83,12 +93,16 @@ time_of_day=np.asarray([to_seconds(x) for x in time_of_day])
 time_of_day/=86400.0
 
 #normalize X and Y coordinates to [0,1]
-dat['Y']-=37.0
-dat['X']-=-120.0
-dat['X']/=3.0
+dat['Y']-=y_min-0.01
+dat['Y']/=(y_max-y_min+0.011)
+dat['X']-=x_max+0.01
+dat['X']/=(x_min-x_max-0.011)
+
+print dat['X'].max(), dat['X'].min()
+print dat['Y'].max(), dat['Y'].min()
 
 #create matrix of features
-X_test=np.column_stack((time_of_day,weekday_cat,district_cat,dat['X'],dat['Y']))
+X_test=np.column_stack((time_of_day,dat['X'],dat['Y'],weekday_cat))
 
 #################################################################################
 #################################################################################
