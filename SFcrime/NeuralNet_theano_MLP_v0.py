@@ -45,6 +45,13 @@ def load_data():
     Y_in=np.loadtxt("Y_train.gz",delimiter=",")
     n=X_in.shape[0]
 
+    #shuffle train set
+    rng_state = np.random.get_state()
+    #randomly permuate the features and outputs using the same shuffle for each epoch
+    np.random.shuffle(X_in)
+    np.random.set_state(rng_state)
+    np.random.shuffle(Y_in)        
+
     frac=0.95
     n_train_set=int(0.95*n)
     train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),])
@@ -421,7 +428,6 @@ class TrainMLP(object):
         #data used for the predictions
         datasets = load_data()
         test_set_x = datasets[2]
-
         ind = T.lscalar('ind')   
 
         #output probabilities
@@ -637,8 +643,8 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([400,200,100])
-    n_in = 10
+    n_hidden = np.array([200,200])
+    n_in = 22
     n_out = 39
     learning_rate=0.1
     rate_adj=0.60
@@ -669,8 +675,8 @@ def test_MLP():
 ####################################################################################
 if __name__ == "__main__":
     pwd_temp=os.getcwd()
-    # dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-    dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+    dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+    # dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)
