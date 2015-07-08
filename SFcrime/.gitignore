@@ -1,5 +1,6 @@
 data/test.csv
 data/train.csv
 data/MLP_predictions_Theano.csv
+data/RF_predictions.csv
 data/params_MLP.zip
 data/params_LogReg.zip
