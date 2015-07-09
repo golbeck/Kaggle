@@ -16,8 +16,8 @@ from sklearn.ensemble import RandomForestClassifier
 ####################################################################################
 ####################################################################################
 pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+# dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -39,9 +39,10 @@ X_test=np.loadtxt("X_test.gz",delimiter=",")
 ####################################################################################
 #classifier
 RFmodel = RandomForestClassifier(
-        n_estimators=40,        #number of trees to generate
+        n_estimators=10,        #number of trees to generate
         max_features='auto',    #consider sqrt of number of features when splitting
-        n_jobs=1               #run in parallel on all cores
+        n_jobs=1,               #run in parallel on all cores
+        criterion="entropy"
         )
 
 #train
