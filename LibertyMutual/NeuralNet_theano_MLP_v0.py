@@ -39,11 +39,17 @@ def load_data():
         # floats it doesn't make sense) therefore instead of returning
         # ``shared_y`` we will have to cast it to int. This little hack
         # lets ous get around this issue
-        return shared_x, T.cast(shared_y, 'int32')
+        return shared_x, shared_y
 
     X_in=np.loadtxt("X_train.gz",delimiter=",")
-    Y_in=np.loadtxt("Y_train.gz",delimiter=",")
     n=X_in.shape[0]
+    Y_in=np.loadtxt("Y_train.gz",delimiter=",")
+    if len(Y_in.shape)==1:
+        m=1
+    else:
+        m=Y_in.shape[1]
+
+    Y_in=Y_in.reshape((n,m))
 
     #shuffle train set
     rng_state = np.random.get_state()
@@ -52,12 +58,12 @@ def load_data():
     np.random.set_state(rng_state)
     np.random.shuffle(Y_in)        
 
-    frac=0.99
-    n_train_set=int(0.99*n)
-    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),])
+    frac=0.95
+    n_train_set=int(frac*n)
+    train_set=(X_in[range(n_train_set),:],Y_in[range(n_train_set),:])
     train_set_x, train_set_y = shared_dataset(train_set)
 
-    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),])
+    valid_set=(X_in[range(n_train_set,n),:],Y_in[range(n_train_set,n),:])
     valid_set_x, valid_set_y = shared_dataset(valid_set)
 
     #normalize to intensities in [0,1]
@@ -116,12 +122,7 @@ class LogisticRegression(object):
         # x is a matrix where row-j  represents input training sample-j
         # b is a vector where element-k represent the free parameter of hyper
         # plain-k
-        self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
-
-        # symbolic description of how to compute prediction as class whose
-        # probability is maximal
-        self.y_pred = T.argmax(self.p_y_given_x, axis=1)
-        # end-snippet-1
+        self.y_pred = T.dot(input, self.W) + self.b
 
         # parameters of the model
         self.params = [self.W, self.b]
@@ -265,20 +266,10 @@ class MLP(object):
             init = np.zeros(param.get_value(borrow=True).shape,dtype=theano.config.floatX)
             self.updates[param] = theano.shared(init)
 
-        #outputs from network with dropout probability weighted parameters
-        self.p_y_given_x = self.layers[-1].p_y_given_x
-
-        # compute prediction as class whose probability is maximal
-        # generate predictions for validation set, which uses the dropout probability weighted parameters
-        self.y_out = T.argmax(self.p_y_given_x, axis=-1)
+        self.y_out = self.layers[-1].y_pred
 
         # loss function uses
-        self.loss = lambda y: self.negative_log_likelihood(self.y)
-
-    # ####################################################################################
-    # def mse(self, y):
-    #     # error between output and target
-    #     return T.mean((self.y_out - y) ** 2)
+        self.loss = lambda y: self.mse(self.y)
 
     ####################################################################################
     def predict_y(self):
@@ -286,55 +277,14 @@ class MLP(object):
         return self.y_out
 
     ####################################################################################
-    def probability_y(self):
-        #predictions for validation and test set
-        return self.p_y_given_x
-
-    ####################################################################################
-    def negative_log_likelihood(self, y):
-        """Return the mean of the negative log-likelihood of the prediction
-        of this model under a given target distribution.
-
-        :type y: theano.tensor.TensorType
-        :param y: corresponds to a vector that gives for each example the
-                  correct label
-
-        Note: we use the mean instead of the sum so that
-              the learning rate is less dependent on the batch size
-        """
-        # start-snippet-2
-        # y.shape[0] is (symbolically) the number of rows in y, i.e.,
-        # number of examples (call it n) in the minibatch
-        # T.arange(y.shape[0]) is a symbolic vector which will contain
-        # [0,1,2,... n-1] T.log(self.p_y_given_x) is a matrix of
-        # Log-Probabilities (call it LP) with one row per example and
-        # one column per class LP[T.arange(y.shape[0]),y] is a vector
-        # v containing [LP[0,y[0]], LP[1,y[1]], LP[2,y[2]], ...,
-        # LP[n-1,y[n-1]]] and T.mean(LP[T.arange(y.shape[0]),y]) is
-        # the mean (across minibatch examples) of the elements in v,
-        # i.e., the mean log-likelihood across the minibatch.
-
-        # use dropout network as this is minimized in training 
-        return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
-        # end-snippet-2
-
-    ####################################################################################
-    def errors(self, y):
-        """Return a float representing the number of errors in the sequence
-        over the total number of examples in the sequence ; zero one
-        loss over the size of the sequence
-        :type y: theano.tensor.TensorType
-        :param y: corresponds to a vector that gives for each example the
-                  correct label
-        """
+    def mse(self, y):
+        # error between output and target
         # check if y has same dimension of y_pred
         if y.ndim != self.y_out.ndim:
             raise TypeError('y should have the same shape as self.y_out',
                 ('y', y.type, 'y_out', self.y_out.type))
 
-        # errors is returned for dropout probability weighted network
-        # used for validation and test set
-        return T.mean(T.neq(self.y_out, y))
+        return T.mean((self.y_out - y) ** 2)
 
 ####################################################################################
 ####################################################################################
@@ -344,11 +294,11 @@ class TrainMLP(object):
         builds a MLP and trains the network
     """
     ####################################################################################
-    def __init__(self, n_in=5, rng=None, n_hidden=np.array([50,50]), n_out=5, 
+    def __init__(self, n_in=5, rng=None, n_hidden=np.array([50,50]), n_out=1, 
                  learning_rate=0.1, rate_adj=0.40, n_epochs=100, L1_reg=0.00, 
                  L2_reg=0.00, learning_rate_decay=0.40,
                  activation='tanh',final_momentum=0.99, initial_momentum=0.5,
-                 momentum_epochs=400.0,batch_size=100):
+                 momentum_epochs=400.0,batch_size=100,patience_init=70):
 
         #initialize the inputs (tunable parameters) and activations
         if rng is None:
@@ -374,6 +324,7 @@ class TrainMLP(object):
         self.final_momentum = float(final_momentum)
         self.momentum_epochs = int(momentum_epochs)
         self.batch_size=int(batch_size)
+        self.patience_init=patience_init
 
         #build the network
         self.ready()
@@ -383,7 +334,7 @@ class TrainMLP(object):
         # input 
         self.x = T.matrix('x')
         # target 
-        self.y = T.vector(name='y', dtype='int32')
+        self.y = T.matrix('y')
 
         if self.activation == 'tanh':
             activation = T.tanh
@@ -431,9 +382,9 @@ class TrainMLP(object):
         ind = T.lscalar('ind')   
 
         #output probabilities
-        prob_model = theano.function(
+        y_fit = theano.function(
             inputs=[ind],
-            outputs=self.MLP.probability_y(),
+            outputs=self.MLP.predict_y(),
             givens={
                 self.x: test_set_x[0:ind]
                 }
@@ -441,8 +392,8 @@ class TrainMLP(object):
 
         #for test set predictions, update batch size to the full set
         n_test_set=test_set_x.get_value(borrow=True).shape[0]
-        test_probs=np.array(prob_model(n_test_set))
-        return test_probs
+        y=np.array(y_fit(n_test_set))
+        return y
 
     ####################################################################################
     def fit(self,path,validation_frequency=10):
@@ -473,7 +424,7 @@ class TrainMLP(object):
 
         #the cost function used for grad descent
         cost = (
-            self.MLP.negative_log_likelihood(self.y)
+            self.MLP.mse(self.y)
             + self.L1_reg * self.MLP.L1
             + self.L2_reg * self.MLP.L2_sqr
         )
@@ -481,7 +432,7 @@ class TrainMLP(object):
         #given training data, compute the error
         compute_train_error = theano.function(
                 inputs=[index],
-                outputs=self.MLP.errors(self.y),
+                outputs=self.MLP.mse(self.y),
                 givens={
                     self.x: train_set_x[index * self.batch_size: (index + 1) * self.batch_size],
                     self.y: train_set_y[index * self.batch_size: (index + 1) * self.batch_size]
@@ -489,12 +440,22 @@ class TrainMLP(object):
             )
 
         #given training data, compute the error
+        # compute_valid_error = theano.function(
+        #         inputs=[index],
+        #         outputs=self.MLP.mse(self.y),
+        #         givens={
+        #             self.x: valid_set_x[index * self.batch_size: (index + 1) * self.batch_size],
+        #             self.y: valid_set_y[index * self.batch_size: (index + 1) * self.batch_size]
+        #             }
+        #     )
+
+         #given training data, compute the error
         compute_valid_error = theano.function(
                 inputs=[index],
-                outputs=self.MLP.errors(self.y),
+                outputs=self.MLP.mse(self.y),
                 givens={
-                    self.x: valid_set_x[index * self.batch_size: (index + 1) * self.batch_size],
-                    self.y: valid_set_y[index * self.batch_size: (index + 1) * self.batch_size]
+                    self.x: valid_set_x[0:index],
+                    self.y: valid_set_y[0:index]
                     }
             )
 
@@ -533,15 +494,6 @@ class TrainMLP(object):
             inputs=[index],
             outputs=self.MLP.predict_y(),
             givens={
-                self.x: test_set_x[index * self.batch_size: (index + 1) * self.batch_size]
-                }
-        )
-
-        #output probabilities
-        probability_model = theano.function(
-            inputs=[index],
-            outputs=self.MLP.probability_y(),
-            givens={
                 self.x: test_set_x[0:index]
                 }
         )
@@ -552,15 +504,14 @@ class TrainMLP(object):
         ###############
         print '... training'
         #initial error is set to 100%
-        best_valid_loss = 1.0
+        best_valid_loss = np.inf
         #start clock
         start_time = time.clock()
         epoch = 0
 
         tol=0.005
         improvement_threshold=1.0
-        patience_init=70
-        patience=patience_init
+        patience=self.patience_init
         # compute number of minibatches for training, validation and testing
         n_train_batches = train_set_x.get_value(borrow=True).shape[0] / self.batch_size
         n_valid_batches = valid_set_x.get_value(borrow=True).shape[0] / self.batch_size
@@ -576,8 +527,10 @@ class TrainMLP(object):
 
             if (epoch % validation_frequency == 0):
                 # compute loss on validation set
-                valid_losses = [compute_valid_error(i) for i in xrange(n_valid_batches)]
-                this_valid_loss = np.mean(valid_losses)
+                # valid_losses = [compute_valid_error(i) for i in xrange(n_valid_batches)]
+                # this_valid_loss = np.mean(valid_losses)
+
+                this_valid_loss=compute_valid_error(n_valid)
 
                 # if we got the best validation score until now
                 if this_valid_loss < best_valid_loss:
@@ -587,7 +540,7 @@ class TrainMLP(object):
                         improvement_threshold
                     ):
                         #only adjust patience if above the min number of epochs (patience_init)
-                        if epoch>=patience_init:
+                        if epoch>=self.patience_init:
                             patience += validation_frequency
                         #save parameters if best performance
                         save_file = open(path, 'wb')  # this will overwrite current contents
@@ -603,8 +556,8 @@ class TrainMLP(object):
                     'epoch %i, validation error %f, best validation error %f, learning rate %f, patience %i' %
                     (
                         epoch,
-                        this_valid_loss * 100.,
-                        best_valid_loss *100,
+                        this_valid_loss,
+                        best_valid_loss,
                         self.learning_rate,
                         patience
                     )
@@ -635,27 +588,28 @@ class TrainMLP(object):
         self._set_weights(weights)
         #for test set predictions, update batch size to the full set
         n_test_set=test_set_x.get_value(borrow=True).shape[0]
-        test_probs=np.array(probability_model(n_test_set))
-        print test_probs.shape
-        return test_probs
+        y_test=np.array(predict_model(n_test_set))
+        print y_test.shape
+        return y_test
 ####################################################################################
 ####################################################################################
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([200,200])
-    n_in = 22
-    n_out = 39
+    n_hidden = np.array([800,800])
+    n_in = 95
+    n_out = 1
     learning_rate=0.1
-    rate_adj=0.60
-    learning_rate_decay=0.99
-    batch_size=200
+    rate_adj=0.999
+    learning_rate_decay=0.999
+    batch_size=50
     final_momentum=0.99
     initial_momentum=0.50
-    momentum_epochs=100.0
-    n_epochs=150
+    momentum_epochs=200.0
+    n_epochs=1000
     L1_reg=0.0
     L2_reg=0.0
+    patience_init=300
 
     rng = np.random.RandomState(2479)
     np.random.seed(0)
@@ -663,7 +617,7 @@ def test_MLP():
     model = TrainMLP(n_in=n_in, rng=rng, n_hidden=n_hidden, n_out=n_out, learning_rate=learning_rate, 
                  rate_adj=rate_adj, n_epochs=n_epochs, L1_reg=L1_reg, L2_reg=L2_reg, learning_rate_decay=learning_rate_decay,
                  activation='sigmoid',final_momentum=final_momentum, initial_momentum=initial_momentum,
-                 momentum_epochs=momentum_epochs,batch_size=batch_size)
+                 momentum_epochs=momentum_epochs,batch_size=batch_size,patience_init=patience_init)
 
     path='params_MLP.zip'
     temp=model.fit(path=path,validation_frequency=5)
@@ -675,30 +629,16 @@ def test_MLP():
 ####################################################################################
 if __name__ == "__main__":
     pwd_temp=os.getcwd()
-    dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-    # dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+    # dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+    dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)
-    temp=test_MLP()
-
-    columns=['ARSON', 'ASSAULT', 'BAD CHECKS', 'BRIBERY',
-                'BURGLARY', 'DISORDERLY CONDUCT',
-                'DRIVING UNDER THE INFLUENCE', 'DRUG/NARCOTIC',
-                'DRUNKENNESS', 'EMBEZZLEMENT', 'EXTORTION',
-                'FAMILY OFFENSES', 'FORGERY/COUNTERFEITING', 'FRAUD',
-                'GAMBLING', 'KIDNAPPING', 'LARCENY/THEFT',
-                'LIQUOR LAWS', 'LOITERING', 'MISSING PERSON',
-                'NON-CRIMINAL', 'OTHER OFFENSES',
-                'PORNOGRAPHY/OBSCENE MAT', 'PROSTITUTION',
-                'RECOVERED VEHICLE', 'ROBBERY', 'RUNAWAY',
-                'SECONDARY CODES', 'SEX OFFENSES FORCIBLE',
-                'SEX OFFENSES NON FORCIBLE', 'STOLEN PROPERTY',
-                'SUICIDE', 'SUSPICIOUS OCC', 'TREA', 'TRESPASS',
-                'VANDALISM', 'VEHICLE THEFT', 'WARRANTS',
-                'WEAPON LAWS']
-    df = pd.DataFrame(columns=['Id']+columns)
-    df=pd.DataFrame(temp,columns=columns)
-    df.insert(loc=0,column='Id',value=range(len(df)))
+    y_test=test_MLP()
+    print y_test
+    df=pd.DataFrame(y_test)
+    df.columns=['Hazard']
+    indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+    df.insert(loc=0,column='Id',value=indices)
     # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
     df.to_csv("MLP_predictions_Theano.csv",sep=",",index=False)
