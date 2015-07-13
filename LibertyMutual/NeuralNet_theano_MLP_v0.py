@@ -41,7 +41,7 @@ def load_data():
         # lets ous get around this issue
         return shared_x, shared_y
 
-    X_in=np.loadtxt("X_train.gz",delimiter=",")
+    X_in=np.loadtxt("X_train_pca_v2.gz",delimiter=",")
     n=X_in.shape[0]
     Y_in=np.loadtxt("Y_train.gz",delimiter=",")
     if len(Y_in.shape)==1:
@@ -67,7 +67,7 @@ def load_data():
     valid_set_x, valid_set_y = shared_dataset(valid_set)
 
     #normalize to intensities in [0,1]
-    test_in=np.loadtxt("X_test.gz",delimiter=",")
+    test_in=np.loadtxt("X_test_pca_v2.gz",delimiter=",")
     test_set_x=theano.shared(np.asarray(test_in,dtype=theano.config.floatX),
                                  borrow=True)
     rval = [(train_set_x, train_set_y),(valid_set_x, valid_set_y), test_set_x]
@@ -596,7 +596,7 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([800,800])
+    n_hidden = np.array([800,400,200])
     n_in = 95
     n_out = 1
     learning_rate=0.1
@@ -605,11 +605,11 @@ def test_MLP():
     batch_size=50
     final_momentum=0.99
     initial_momentum=0.50
-    momentum_epochs=200.0
+    momentum_epochs=100.0
     n_epochs=1000
     L1_reg=0.0
     L2_reg=0.0
-    patience_init=300
+    patience_init=30
 
     rng = np.random.RandomState(2479)
     np.random.seed(0)
@@ -629,8 +629,8 @@ def test_MLP():
 ####################################################################################
 if __name__ == "__main__":
     pwd_temp=os.getcwd()
-    # dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
-    dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+    dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+    # dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)
@@ -641,4 +641,4 @@ if __name__ == "__main__":
     indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
     df.insert(loc=0,column='Id',value=indices)
     # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
-    df.to_csv("MLP_predictions_Theano.csv",sep=",",index=False)
+    df.to_csv("MLP_predictions_Theano_pca.csv",sep=",",index=False)
