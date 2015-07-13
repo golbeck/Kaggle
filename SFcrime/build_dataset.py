@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 
 pwd_temp=os.getcwd()
-dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-# dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+# dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -34,7 +34,9 @@ dat=dat.drop(indices_max)
 #convert categories to 0-1 indicator matrix
 # crime_cat=pd.get_dummies(dat['Category'])
 weekday_cat=pd.get_dummies(dat['DayOfWeek'])
+weekday_cat=weekday_cat.ix[:,0:6]
 district_cat=pd.get_dummies(dat['PdDistrict'])
+district_cat=district_cat.ix[:,0:9]
 #strip out times
 # time_of_day=dat['Dates'].str.split(' ').str[1].str[0:5]
 time_of_day=dat['Dates'].str.split(' ').str[1]
@@ -52,6 +54,7 @@ def to_month(s):
 #convert month to dummy variable
 month_=pd.Series([to_month(x) for x in month_])
 month_dummies=pd.get_dummies(month_)
+month_dummies=month_dummies.ix[:,0:11]
 #normalize
 time_of_day/=86400.0
 # time_of_day=pd.to_datetime(time_of_day)
@@ -91,7 +94,9 @@ dat=pd.io.parsers.read_table('test.csv',sep=',',header=0)
 #convert categories to 0-1 indicator matrix
 # crime_cat=pd.get_dummies(dat['Category'])
 weekday_cat=pd.get_dummies(dat['DayOfWeek'])
+weekday_cat=weekday_cat.ix[:,0:6]
 district_cat=pd.get_dummies(dat['PdDistrict'])
+district_cat=district_cat.ix[:,0:9]
 #strip out times
 # time_of_day=dat['Dates'].str.split(' ').str[1].str[0:5]
 time_of_day=dat['Dates'].str.split(' ').str[1]
@@ -104,6 +109,7 @@ month_=dat['Dates'].str.split(' ').str[0]
 #convert month to dummy variable
 month_=pd.Series([to_month(x) for x in month_])
 month_dummies=pd.get_dummies(month_)
+month_dummies=month_dummies.ix[:,0:11]
 
 #normalize X and Y coordinates to [0,1]
 dat['Y']-=y_min-0.01

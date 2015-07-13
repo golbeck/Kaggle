@@ -559,7 +559,7 @@ class TrainMLP(object):
 
         tol=0.005
         improvement_threshold=1.0
-        patience_init=70
+        patience_init=60
         patience=patience_init
         # compute number of minibatches for training, validation and testing
         n_train_batches = train_set_x.get_value(borrow=True).shape[0] / self.batch_size
@@ -643,8 +643,8 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([200,200])
-    n_in = 22
+    n_hidden = np.array([400,200,100])
+    n_in = 20
     n_out = 39
     learning_rate=0.1
     rate_adj=0.60
@@ -675,8 +675,8 @@ def test_MLP():
 ####################################################################################
 if __name__ == "__main__":
     pwd_temp=os.getcwd()
-    dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
-    # dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
+    # dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+    dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)
