@@ -16,13 +16,19 @@ import xgboost as xgb
 for details on using xgboost, see:
 https://github.com/dmlc/xgboost/blob/master/doc/parameter.md
 '''
+####################################################################################
+####################################################################################
+####################################################################################
+def evalerror(pred, y_in):
+    error=sum( pred[i] != y_in[i] for i in range(len(pred))) / float(len(pred))
+    return error
 
 ####################################################################################
 ####################################################################################
 ####################################################################################
 pwd_temp=os.getcwd()
-dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
-# dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+dir1='/home/sgolbeck/workspace/Kaggle/SFcrime'
+# dir1='/home/golbeck/Workspace/Kaggle/SFcrime'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -58,33 +64,52 @@ param = {}
 # # use softmax multi-class classification
 # param['objective'] = 'multi:softmax'
 # scale weight of positive examples
-param['objective']='reg:linear'
-param['eval_metric']='rmse'
-param["min_child_weight"] = 2
+param['objective'] = 'multi:softprob'
+# param['eval_metric']='rmse'
+param["min_child_weight"] = 5
 param["subsample"] = 0.7
 # params["scale_pos_weight"] = 1.0
 param['alpha']=0.1
 param['eta'] = 0.1
-param['max_depth'] = 5
+# param['max_depth'] = 5
 param['silent'] = 0
 param['nthread'] = 4
-n_class=1
+n_class=39
 param['num_class'] = n_class
-num_round = 200
+num_round = 30
 
 watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
 bst = xgb.train(param, xg_train, num_round, watchlist );
 # get prediction
 pred = bst.predict( xg_valid );
 
-print ('prediction error=%f' % (sum( (pred[i] - valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+yprob = bst.predict( xg_valid ).reshape( valid_Y.shape[0], n_class )
+ylabel = np.argmax(yprob, axis=1)
+error=evalerror(ylabel,valid_Y)
 
-y_test = bst.predict( xg_test );
-df=pd.DataFrame(y_test)
-df.columns=['Hazard']
-indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
-df.insert(loc=0,column='Id',value=indices)
-# np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
+
+
+yprob = bst.predict( xg_test ).reshape( test_X.shape[0], n_class )
+#output test set probabilities to csv file
+columns=['ARSON', 'ASSAULT', 'BAD CHECKS', 'BRIBERY',
+            'BURGLARY', 'DISORDERLY CONDUCT',
+            'DRIVING UNDER THE INFLUENCE', 'DRUG/NARCOTIC',
+            'DRUNKENNESS', 'EMBEZZLEMENT', 'EXTORTION',
+            'FAMILY OFFENSES', 'FORGERY/COUNTERFEITING', 'FRAUD',
+            'GAMBLING', 'KIDNAPPING', 'LARCENY/THEFT',
+            'LIQUOR LAWS', 'LOITERING', 'MISSING PERSON',
+            'NON-CRIMINAL', 'OTHER OFFENSES',
+            'PORNOGRAPHY/OBSCENE MAT', 'PROSTITUTION',
+            'RECOVERED VEHICLE', 'ROBBERY', 'RUNAWAY',
+            'SECONDARY CODES', 'SEX OFFENSES FORCIBLE',
+            'SEX OFFENSES NON FORCIBLE', 'STOLEN PROPERTY',
+            'SUICIDE', 'SUSPICIOUS OCC', 'TREA', 'TRESPASS',
+            'VANDALISM', 'VEHICLE THEFT', 'WARRANTS',
+            'WEAPON LAWS']
+df = pd.DataFrame(columns=['Id']+columns)
+df=pd.DataFrame(yprob,columns=columns)
+df.insert(loc=0,column='Id',value=range(len(df)))
+# np.savetxt("RF_predictions.csv.gz", df, delimiter=",")
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
@@ -93,8 +118,8 @@ df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-p=range(20)
-frac_=0.05
+p=range(50)
+frac_=0.02
 r0=range(sz[0])
 X_folds=np.zeros(len(p)-1)
 X_folds=np.zeros(len(p)-1)
@@ -113,9 +138,10 @@ for i in range(len(p)-1):
       xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
       watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
       bst = xgb.train(param, xg_train, num_round, watchlist );
-      pred = bst.predict( xg_valid );
-      valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-      X_folds[i]=valid_rmse
+      yprob = bst.predict( xg_valid ).reshape( valid_Y.shape[0], n_class )
+      ylabel = np.argmax(yprob, axis=1)
+      error=evalerror(ylabel,valid_Y)
+      X_folds[i]=error
       y_test = bst.predict( xg_test );
       y_test_mat[:,i]=y_test
 #bag estimates from the model trained on different folds (no need to average since ranking only matter)
@@ -134,46 +160,46 @@ df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-depth_grid=[3,5,7,9,11,15,20,25]
-n_depth=len(depth_grid)
+child_grid=[1,3,5]
+n_child=len(child_grid)
 eta_grid=[0.1]
 n_eta=len(eta_grid)
-alpha_grid=[0.0,0.001,0.01,0.1]
-n_alpha=len(alpha_grid)
-subsample_grid=[0.75,0.80,0.85,0.90]
+gamma_grid=[0.0,0.1,0.4]
+n_gamma=len(gamma_grid)
+subsample_grid=[0.7,0.75,0.80]
 n_subsample=len(subsample_grid)
 
-X_cv=np.zeros((n_depth*n_eta*n_alpha*n_subsample,5))
+X_cv=np.zeros((n_child*n_eta*n_gamma*n_subsample,5))
 ind=0
-for i in range(n_depth):
+for i in range(n_child):
       for j in range(n_eta):
-            for k in range(n_alpha):
+            for k in range(n_gamma):
                   for l in range(n_subsample):
                         param = {}
-                        param['max_depth']=depth_grid[i]
+                        param['min_child_weight']=child_grid[i]
                         param['eta']=eta_grid[j]
-                        param['alpha']=alpha_grid[k]
+                        param['alpha']=0.1
+                        param['gamma']=gamma_grid[k]
                         param["subsample"] = subsample_grid[l]
-                        param['objective']='reg:linear'
-                        param['eval_metric']='rmse'
-                        param["min_child_weight"] = 1
+                        param['objective'] = 'multi:softprob'
                         # params["scale_pos_weight"] = 1.0
                         param['silent'] = 1
                         param['nthread'] = 4
-                        n_class=1
+                        n_class=39
                         param['num_class'] = n_class
 
                         watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-                        num_round = 100
+                        num_round = 5
+
                         bst = xgb.train(param, xg_train, num_round, watchlist );
-                        # get prediction
-                        pred = bst.predict( xg_valid );
-                        X_cv[ind,0]=depth_grid[i]
+                        yprob = bst.predict( xg_valid ).reshape( valid_Y.shape[0], n_class )
+                        ylabel = np.argmax(yprob, axis=1)
+                        error=evalerror(ylabel,valid_Y)
+                        X_cv[ind,0]=child_grid[i]
                         X_cv[ind,1]=eta_grid[j]
-                        X_cv[ind,2]=alpha_grid[k]
+                        X_cv[ind,2]=gamma_grid[k]
                         X_cv[ind,3]=subsample_grid[l]
-                        valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-                        X_cv[ind,4]=valid_rmse
+                        X_cv[ind,4]=error
                         ind+=1
                         print ind
 

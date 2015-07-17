@@ -5,3 +5,4 @@ data/XGB_predictions_Theano.csv
 data/RF_predictions.csv
 data/params_MLP.zip
 data/params_LogReg.zip
+data/xgb.model

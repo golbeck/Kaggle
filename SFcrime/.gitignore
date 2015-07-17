@@ -6,3 +6,8 @@ data/RF_predictions.csv
 data/params_MLP.zip
 data/params_LogReg.zip
 data/xgb.model
+data/X_test.gz
+data/X_test_v1.gz
+data/X_train.gz
+data/X_train_v1.gz
+data/Y_train.gz
