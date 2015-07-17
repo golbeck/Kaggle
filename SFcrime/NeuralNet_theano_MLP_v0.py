@@ -643,7 +643,7 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([400,200,100])
+    n_hidden = np.array([600,300,100])
     n_in = 20
     n_out = 39
     learning_rate=0.1
@@ -652,7 +652,7 @@ def test_MLP():
     batch_size=200
     final_momentum=0.99
     initial_momentum=0.50
-    momentum_epochs=100.0
+    momentum_epochs=150.0
     n_epochs=150
     L1_reg=0.0
     L2_reg=0.0

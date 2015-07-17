@@ -596,20 +596,20 @@ class TrainMLP(object):
 ####################################################################################
 def test_MLP():
     """ Test MLP. """
-    n_hidden = np.array([800,400,200])
+    n_hidden = np.array([600,300,100])
     n_in = 95
     n_out = 1
-    learning_rate=0.1
+    learning_rate=0.01
     rate_adj=0.999
     learning_rate_decay=0.999
     batch_size=50
     final_momentum=0.99
-    initial_momentum=0.50
+    initial_momentum=0.01
     momentum_epochs=100.0
     n_epochs=1000
     L1_reg=0.0
     L2_reg=0.0
-    patience_init=30
+    patience_init=80
 
     rng = np.random.RandomState(2479)
     np.random.seed(0)
@@ -629,8 +629,8 @@ def test_MLP():
 ####################################################################################
 if __name__ == "__main__":
     pwd_temp=os.getcwd()
-    dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
-    # dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+    # dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+    dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
     dir1=dir1+'/data' 
     if pwd_temp!=dir1:
         os.chdir(dir1)

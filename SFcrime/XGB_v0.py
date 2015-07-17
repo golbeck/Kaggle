@@ -39,10 +39,11 @@ test_X=np.loadtxt("X_test.gz",delimiter=",")
 ####################################################################################
 sz = X_dat.shape
 
-train_X = X_dat[:int(sz[0] * 0.95), :]
-train_Y = Y_dat[:int(sz[0] * 0.95)]
-valid_X = X_dat[int(sz[0] * 0.95):, :]
-valid_Y = Y_dat[int(sz[0] * 0.95):]
+frac=0.99
+train_X = X_dat[:int(sz[0] * frac), :]
+train_Y = Y_dat[:int(sz[0] * frac)]
+valid_X = X_dat[int(sz[0] * frac):, :]
+valid_Y = Y_dat[int(sz[0] * frac):]
 
 xg_train = xgb.DMatrix( train_X, label=train_Y)
 xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
