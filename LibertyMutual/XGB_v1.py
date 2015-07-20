@@ -54,7 +54,7 @@ dir1=dir1+'/data'
 if pwd_temp!=dir1:
     os.chdir(dir1)
 
-X_dat=np.loadtxt("X_train_v5.gz",delimiter=",")
+X_dat=np.loadtxt("X_train_v1.gz",delimiter=",")
 Y_dat=np.loadtxt("Y_train.gz",delimiter=",")
 n=X_dat.shape[0]
 
@@ -65,7 +65,7 @@ np.random.shuffle(X_dat)
 np.random.set_state(rng_state)
 np.random.shuffle(Y_dat)        
 
-test_X=np.loadtxt("X_test_v5.gz",delimiter=",")
+test_X=np.loadtxt("X_test_v1.gz",delimiter=",")
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -87,12 +87,13 @@ param = {}
 # scale weight of positive examples
 param['objective']='reg:linear'
 param['eval_metric']='rmse'
-param["min_child_weight"] = 1
-param["subsample"] = 0.7
+param["min_child_weight"] = 10
+param["subsample"] = 0.5
 # params["scale_pos_weight"] = 1.0
 param['alpha']=0.1
+param['lambda']=0.1
 param['eta'] = 0.1
-param['max_depth'] = 5
+param['max_depth'] = 10
 param['silent'] = 0
 param['nthread'] = 4
 n_class=1
@@ -123,8 +124,7 @@ df.to_csv("XGB_predictions.csv",sep=",",index=False)
 p=range(20)
 frac_=0.05
 r0=range(sz[0])
-X_folds=np.zeros(len(p)-1)
-X_folds=np.zeros(len(p)-1)
+X_folds=np.zeros(len(p)-1,2)
 n_test=test_X.shape[0]
 y_test_mat=np.zeros((n_test,len(p)-1))
 for i in range(len(p)-1):
@@ -142,7 +142,9 @@ for i in range(len(p)-1):
       bst = xgb.train(param, xg_train, num_round, watchlist );
       pred = bst.predict( xg_valid );
       valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-      X_folds[i]=valid_rmse
+      valid_gini=Gini(valid_Y, pred)
+      X_folds[i,0]=valid_rmse
+      X_folds[i,1]=valid_gini
       y_test = bst.predict( xg_test );
       y_test_mat[:,i]=y_test
 #bag estimates from the model trained on different folds (no need to average since ranking only matter)
@@ -153,7 +155,7 @@ df.columns=['Hazard']
 indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
 df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
-df.to_csv("XGB_predictions_v5.csv",sep=",",index=False)
+df.to_csv("XGB_predictions_v6.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -161,29 +163,32 @@ df.to_csv("XGB_predictions_v5.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-depth_grid=[3,5,10,15,20,30]
+depth_grid=[1,3,5,10]
 n_depth=len(depth_grid)
 eta_grid=[0.1]
 n_eta=len(eta_grid)
-alpha_grid=[0.1]
-n_alpha=len(alpha_grid)
-subsample_grid=[0.70,0.75,0.80]
+lambda_grid=[0.0,0.01,0.1]
+n_lambda=len(lambda_grid)
+child_grid=[1,3,5,10]
+n_child=len(child_grid)
+subsample_grid=[0.50,0.60,0.70]
 n_subsample=len(subsample_grid)
 
-X_cv=np.zeros((n_depth*n_eta*n_alpha*n_subsample,5))
+X_cv=np.zeros((n_depth*n_lambda*n_child*n_subsample,6))
 ind=0
 for i in range(n_depth):
-      for j in range(n_eta):
-            for k in range(n_alpha):
+      for j in range(n_lambda):
+            for k in range(n_child):
                   for l in range(n_subsample):
                         param = {}
                         param['max_depth']=depth_grid[i]
-                        param['eta']=eta_grid[j]
-                        param['alpha']=alpha_grid[k]
+                        param['eta']=0.1
+                        param['lambda']=lambda_grid[j]
+                        param['alpha']=0.1
                         param["subsample"] = subsample_grid[l]
                         param['objective']='reg:linear'
                         param['eval_metric']='rmse'
-                        param["min_child_weight"] = 1
+                        param["min_child_weight"] = child_grid[k]
                         # params["scale_pos_weight"] = 1.0
                         param['silent'] = 1
                         param['nthread'] = 4
@@ -196,16 +201,18 @@ for i in range(n_depth):
                         # get prediction
                         pred = bst.predict( xg_valid );
                         X_cv[ind,0]=depth_grid[i]
-                        X_cv[ind,1]=eta_grid[j]
-                        X_cv[ind,2]=alpha_grid[k]
+                        X_cv[ind,1]=lambda_grid[j]
+                        X_cv[ind,2]=child_grid[k]
                         X_cv[ind,3]=subsample_grid[l]
                         valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
+                        valid_gini=Gini(valid_Y, pred)
                         X_cv[ind,4]=valid_rmse
+                        X_cv[ind,5]=valid_gini
                         ind+=1
-                        print ind
+                        print ind, valid_rmse, valid_gini
 
 df_cv=pd.DataFrame(X_cv)
-df_cv.to_csv('xgboost_cv_v3.csv')
+df_cv.to_csv('xgboost_cv_v4.csv')
 
 ####################################################################################
 ####################################################################################
