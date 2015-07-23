@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 
 pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
-dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+# dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
