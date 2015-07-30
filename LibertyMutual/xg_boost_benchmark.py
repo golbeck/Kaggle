@@ -5,6 +5,34 @@ import xgboost as xgb
 from sklearn.feature_extraction import DictVectorizer
 
 
+
+####################################################################################
+####################################################################################
+####################################################################################
+def Gini(y_true, y_pred):
+    # check and get number of samples
+    assert y_true.shape == y_pred.shape
+    n_samples = y_true.shape[0]
+    
+    # sort rows on prediction column 
+    # (from largest to smallest)
+    arr = np.array([y_true, y_pred]).transpose()
+    true_order = arr[arr[:,0].argsort()][::-1,0]
+    pred_order = arr[arr[:,1].argsort()][::-1,0]
+    
+    # get Lorenz curves
+    L_true = np.cumsum(true_order) / np.sum(true_order)
+    L_pred = np.cumsum(pred_order) / np.sum(pred_order)
+    L_ones = np.linspace(0, 1, n_samples)
+    
+    # get Gini coefficients (area between curves)
+    G_true = np.sum(L_ones - L_true)
+    G_pred = np.sum(L_ones - L_pred)
+    
+    # normalize to true Gini coefficient
+    return G_pred/G_true
+
+
 def xgboost_pred(train,labels,test):
     params = {}
     params["objective"] = "reg:linear"
@@ -33,8 +61,13 @@ def xgboost_pred(train,labels,test):
     #train using early stopping and predict
     watchlist = [(xgtrain, 'train'),(xgval, 'val')]
     model = xgb.train(plst, xgtrain, num_rounds, watchlist, early_stopping_rounds=50)
+
+    preds_valid = model.predict(xgval)
+    valid_gini=Gini(np.array(labels[:offset,]), preds_valid[:,])
+    print valid_gini
     #model = xgb.train(plst, xgtrain, 1000)
     preds1 = model.predict(xgtest)
+
 
     #reverse train and labels and use different 5k for early stopping. 
     # this adds very little to the score but it is an option if you are concerned about using all the data. 
@@ -48,6 +81,9 @@ def xgboost_pred(train,labels,test):
 
     watchlist = [(xgtrain, 'train'),(xgval, 'val')]
     model = xgb.train(plst, xgtrain, num_rounds, watchlist, early_stopping_rounds=50)
+    preds_valid = model.predict(xgval)
+    valid_gini=Gini(np.array(labels[:offset,]), preds_valid[:,])
+    print valid_gini
 #   model = xgb.train(plst, xgtrain, 1000)
     preds2 = model.predict(xgtest)
 
@@ -58,8 +94,8 @@ def xgboost_pred(train,labels,test):
     return preds
 
 #load train and test 
-train  = pd.read_csv('../input/train.csv', index_col=0)
-test  = pd.read_csv('../input/test.csv', index_col=0)
+train  = pd.read_csv('train.csv', index_col=0)
+test  = pd.read_csv('test.csv', index_col=0)
 
 
 labels = train.Hazard
@@ -113,8 +149,8 @@ preds2 = xgboost_pred(train,labels,test)
 
 preds = 0.5 * preds1 + 0.5 * preds2
 
-#generate solution
-preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
-preds = preds.set_index('Id')
-preds.to_csv('xgboost_benchmark_ds.csv')
+# #generate solution
+# preds = pd.DataFrame({"Id": test_ind, "Hazard": preds})
+# preds = preds.set_index('Id')
+# preds.to_csv('xgboost_benchmark_ds.csv')
                 

@@ -26,8 +26,13 @@ df=pd.io.parsers.read_table('train.csv',sep=',',header=0)
 dat=pd.DataFrame()
 for col in df.columns[2:]:
     if type(df[col].ix[0])!=str:
-        # dat[col]=pd.Categorical(df[col]).labels
         dat[col]=df[col]
+    else:
+        dat[col]=pd.Categorical(df[col]).labels
+
+# dat.drop('T2_V8',axis=1,inplace=True)
+dat.drop('T2_V12',axis=1,inplace=True)
+# dat.drop('T1_V16',axis=1,inplace=True)
 
 dat_mean=dat.mean()
 dat_std=dat.std()
