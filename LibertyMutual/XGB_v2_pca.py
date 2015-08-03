@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import theano
 import theano.tensor as T
+from sklearn.decomposition import PCA
+from sklearn import preprocessing
 
 import xgboost as xgb
 
@@ -17,6 +19,7 @@ import xgboost as xgb
 for details on using xgboost, see:
 https://github.com/dmlc/xgboost/blob/master/doc/parameter.md
 '''
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -55,70 +58,67 @@ if pwd_temp!=dir1:
 
 dat=pd.io.parsers.read_table('train.csv',sep=',',header=0)
 
+
+dat.drop('T2_V8',axis=1,inplace=True)
+dat.drop('T2_V12',axis=1,inplace=True)
+dat.drop('T2_V11',axis=1,inplace=True)
+dat.drop('T1_V17',axis=1,inplace=True)
+dat.drop('T2_V3',axis=1,inplace=True)
 #convert str levels to numerical levels
-df=pd.DataFrame()
+
+df_pca=pd.DataFrame()
+df1=pd.DataFrame()
+scaler_list=[]
 for col in dat.columns[2:]:
-    if type(dat[col].ix[0])==str:
-        df[col]=pd.Categorical(dat[col]).labels
+    if type(dat[col].ix[0])!=str:
+        #normalize to [0,1]
+        df_pca[col] = preprocessing.scale(np.array(dat[col].astype('float')))
+        scaler_list.append(preprocessing.StandardScaler().fit(np.array(dat[col].astype('float'))))
     else:
-        df[col]=dat[col]
+        df1[col]=pd.Categorical(dat[col]).labels
 
+n=df_pca.shape[1]
+pca = PCA(n_components=n)
+pca_fit=pca.fit(df_pca)
+df_fit=pd.DataFrame(pca_fit.transform(df_pca),columns=df_pca.columns)
 
-df.drop('T2_V10', axis=1, inplace=True)
-df.drop('T1_V13', axis=1, inplace=True)
-df.drop('T2_V5', axis=1, inplace=True)
-df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V10', axis=1, inplace=True)
-# df.drop('T2_V7', axis=1, inplace=True)
-# df.drop('T1_V13', axis=1, inplace=True)
-# df.drop('T1_V10', axis=1, inplace=True)
-
-# df.drop('T2_V8',axis=1,inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V11',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
-# df.drop('T2_V3',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
+df= pd.concat([df_fit, df1], axis=1)
 
 col_names=df.columns
 
 X_dat=np.array(df)
 Y_dat=np.array(dat['Hazard'])
-del dat, df
+del dat, df_pca, df1, df_fit, df
 
+####################################################################################
 dat=pd.io.parsers.read_table('test.csv',sep=',',header=0)
+
+dat.drop('T2_V8',axis=1,inplace=True)
+dat.drop('T2_V12',axis=1,inplace=True)
+dat.drop('T2_V11',axis=1,inplace=True)
+dat.drop('T1_V17',axis=1,inplace=True)
+dat.drop('T2_V3',axis=1,inplace=True)
 
 indices=dat['Id']
 #convert str levels to numerical levels
-df=pd.DataFrame()
+df_pca=pd.DataFrame()
+df1=pd.DataFrame()
+ind=0
 for col in dat.columns[1:]:
-    if type(dat[col].ix[0])==str:
-        df[col]=pd.Categorical(dat[col]).labels
-    else:
-        df[col]=dat[col]
+    if type(dat[col].ix[0])!=str:
+        #normalize to [0,1]
+        df_pca[col] = scaler_list[ind].transform(np.array(dat[col].astype('float')))
+        ind+=1
+    else:        
+        df1[col]=pd.Categorical(dat[col]).labels
 
-
-df.drop('T2_V10', axis=1, inplace=True)
-df.drop('T1_V13', axis=1, inplace=True)
-df.drop('T2_V5', axis=1, inplace=True)
-df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V10', axis=1, inplace=True)
-# df.drop('T2_V7', axis=1, inplace=True)
-# df.drop('T1_V13', axis=1, inplace=True)
-# df.drop('T1_V10', axis=1, inplace=True)
-
-# df.drop('T1_V17',axis=1,inplace=True)
-
-# df.drop('T2_V8',axis=1,inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V11',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
-# df.drop('T2_V3',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
+df_fit=pd.DataFrame(pca_fit.transform(df_pca),columns=df_pca.columns)
+df= pd.concat([df_fit, df1], axis=1)
 
 test_X=np.array(df)
-del dat, df
+del dat, df_pca, df1, df_fit, df
 
+####################################################################################
 n=X_dat.shape[0]
 sz = X_dat.shape
 
@@ -137,9 +137,7 @@ np.random.shuffle(Y_dat)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-sz = X_dat.shape
-
-frac=0.98
+frac=0.90
 train_X = X_dat[:int(sz[0] * frac), :]
 train_Y = Y_dat[:int(sz[0] * frac)]
 valid_X = X_dat[int(sz[0] * frac):, :]
@@ -184,6 +182,9 @@ for key in temp.keys():
     A+=temp[key]
 
 
+
+    
+
 y_test = bst.predict( xg_test );
 df=pd.DataFrame(y_test)
 df.columns=['Hazard']
@@ -192,65 +193,6 @@ df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
 
-####################################################################################
-####################################################################################
-####################################################################################
-dat=pd.io.parsers.read_table('train.csv',sep=',',header=0)
-
-#convert str levels to numerical levels
-df=pd.DataFrame()
-for col in dat.columns[2:]:
-    if type(dat[col].ix[0])==str:
-        df[col]=pd.Categorical(dat[col]).labels
-    else:
-        df[col]=dat[col]
-
-df.drop('T2_V10', axis=1, inplace=True)
-df.drop('T1_V13', axis=1, inplace=True)
-df.drop('T2_V5', axis=1, inplace=True)
-col_names=df.columns
-Y_dat=np.array(dat['Hazard'])
-####################################################################################
-
-sz = df.shape
-
-import itertools
-def findsubsets(S,m):
-    return set(itertools.combinations(S, m))
-    
-col_lists=list(findsubsets(col_names,sz[1]-2))
-####################################################################################
-X_mean=np.zeros((len(col_lists),3))
-p=range(4)
-frac_=0.25
-r0=range(sz[0])
-
-for ii in range(len(col_lists)):
-    X_dat=np.array(df[list(col_lists[ii])])
-    X_folds=np.zeros((len(p),2))
-    n_test=test_X.shape[0]
-    for i in p:
-        r_valid=set(r0[int(p[i]*frac_*sz[0]):int((p[i]+1)*frac_*sz[0])])
-        r_train=set(r0)-r_valid
-        r_valid_indices=[x for x in r_valid]
-        r_train_indices=[y for y in r_train]
-        train_X = X_dat[r_train_indices, :]
-        train_Y = Y_dat[r_train_indices]
-        valid_X = X_dat[r_valid_indices, :]
-        valid_Y = Y_dat[r_valid_indices]
-        xg_train = xgb.DMatrix( train_X, label=train_Y)
-        xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
-        watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-        bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
-        pred = bst.predict( xg_valid );
-
-        valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-        valid_gini=Gini(valid_Y, pred)
-        X_folds[i,0]=valid_rmse
-        X_folds[i,1]=valid_gini
-    X_mean[ii,0]=ii
-    X_mean[ii,1:]=X_folds.mean(axis=0)
-    print "iteration %i out of %g" %(ii+1,len(col_lists))
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -308,8 +250,8 @@ df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
-p=range(20)
-frac_=0.05
+p=range(10)
+frac_=0.10
 r0=range(sz[0])
 X_folds=np.zeros((len(p),2))
 n_test=test_X.shape[0]
