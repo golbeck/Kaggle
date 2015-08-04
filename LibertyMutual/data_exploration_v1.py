@@ -98,3 +98,39 @@ import matplotlib as mpl
 
 #plot all of the histograms
 dat.hist()
+
+
+
+#################################################################################
+#################################################################################
+%pylab
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+pwd_temp=os.getcwd()
+dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+# dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+dir1=dir1+'/data' 
+if pwd_temp!=dir1:
+    os.chdir(dir1)
+
+dat=pd.io.parsers.read_table('train.csv',sep=',',header=0)
+
+#convert str levels to numerical levels
+df=pd.DataFrame()
+for col in dat.columns[2:]:
+    if type(dat[col].ix[0])==str:
+        df[col]=pd.Categorical(dat[col]).labels
+    else:
+        df[col]=dat[col]
+
+df['Hazard']=dat['Hazard']
+col_names=df.columns
+
+
+ind=0
+for i in range(len(col_names)-1):
+    ind+=1
+    plt.figure(ind)
+    plt.scatter(df[col_names[i]], df['Hazard'])
+    plt.show()

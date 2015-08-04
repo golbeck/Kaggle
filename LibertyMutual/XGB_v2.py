@@ -47,8 +47,8 @@ def Gini(y_true, y_pred):
 ####################################################################################
 ####################################################################################
 pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
-dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
+dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
+# dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -67,7 +67,7 @@ for col in dat.columns[2:]:
 df.drop('T2_V10', axis=1, inplace=True)
 df.drop('T1_V13', axis=1, inplace=True)
 df.drop('T2_V5', axis=1, inplace=True)
-df.drop('T2_V12',axis=1,inplace=True)
+# df.drop('T2_V12',axis=1,inplace=True)
 # df.drop('T2_V10', axis=1, inplace=True)
 # df.drop('T2_V7', axis=1, inplace=True)
 # df.drop('T1_V13', axis=1, inplace=True)
@@ -101,7 +101,7 @@ for col in dat.columns[1:]:
 df.drop('T2_V10', axis=1, inplace=True)
 df.drop('T1_V13', axis=1, inplace=True)
 df.drop('T2_V5', axis=1, inplace=True)
-df.drop('T2_V12',axis=1,inplace=True)
+# df.drop('T2_V12',axis=1,inplace=True)
 # df.drop('T2_V10', axis=1, inplace=True)
 # df.drop('T2_V7', axis=1, inplace=True)
 # df.drop('T1_V13', axis=1, inplace=True)
@@ -242,7 +242,8 @@ for ii in range(len(col_lists)):
         xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
         watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
         bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
-        pred = bst.predict( xg_valid );
+        n_tree = bst.best_iteration
+        pred = bst.predict( xg_valid, ntree_limit=n_tree );
 
         valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
         valid_gini=Gini(valid_Y, pred)
@@ -286,12 +287,12 @@ num_round = 100
 
 watchlist = [ (xg_train,'train') ]
 bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
-# get prediction
-pred = bst.predict( xg_train );
+n_tree = bst.best_iteration
+pred = bst.predict( xg_train, ntree_limit=n_tree);
 
 print ('prediction error=%f' % (sum( (pred[i] - train_Y[i])**2 for i in range(len(train_Y))) / float(len(train_Y)) ))
-valid_gini=Gini(train_Y, pred)
-print 'gini coefficient on validation set=%f' %valid_gini
+train_gini=Gini(train_Y, pred)
+print 'gini coefficient on validation set=%f' %train_gini
 
 y_test = bst.predict( xg_test );
 df=pd.DataFrame(y_test)
@@ -329,7 +330,8 @@ for i in p:
     xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
     watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
     bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
-    pred = bst.predict( xg_valid );
+    n_tree = bst.best_iteration
+    pred = bst.predict( xg_valid, ntree_limit=n_tree );
     feat_imp = bst.get_fscore()
     temp = np.array(feat_imp.values()).argmin()
     least_imp.append(feat_imp.keys()[temp])
@@ -344,7 +346,7 @@ for i in p:
     valid_gini=Gini(valid_Y, pred)
     X_folds[i,0]=valid_rmse
     X_folds[i,1]=valid_gini
-    y_test = bst.predict( xg_test );
+    y_test = bst.predict( xg_test, ntree_limit=n_tree );
     y_test_mat[:,i]=y_test
 #bag estimates from the model trained on different folds (no need to average since ranking only matter)
 y_bag=y_test_mat.sum(axis=1)
@@ -405,8 +407,9 @@ for i in range(n_depth):
                         watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
                         num_round = 100
                         bst = xgb.train(param, xg_train, num_round, watchlist,early_stopping_rounds=50);
-                        # get prediction
-                        pred = bst.predict( xg_valid );
+                        n_tree = bst.best_iteration
+                        pred = bst.predict( xg_valid, ntree_limit=n_tree );
+
                         X_cv[ind,0]=depth_grid[i]
                         X_cv[ind,1]=lambda_grid[j]
                         X_cv[ind,2]=child_grid[k]
@@ -427,29 +430,29 @@ df_cv.to_csv('xgboost_cv_v2.csv')
 from sklearn import cross_validation
 
 #set up folds and repetitions
-n_reps=2
-n_folds=2
+n_reps=4
+n_folds=4
 X_folds=np.zeros((n_reps*n_folds,2))
 n_test=test_X.shape[0]
 y_test_mat=np.zeros((n_test,n_reps*n_folds))
-k_fold = cross_validation.KFold(n=sz[0], n_folds=n_folds)
+k_fold = cross_validation.KFold(n=sz[0], n_folds=n_folds,random_state=seed)
 
 #cv parameters
-depth_grid=[7,10,13]
+depth_grid=[6,7]
 n_depth=len(depth_grid)
 eta_grid=[0.01,0.1]
 n_eta=len(eta_grid)
 lambda_grid=[0.01,0.1]
 n_lambda=len(lambda_grid)
-child_grid=[20,25,30]
+child_grid=[25,30]
 n_child=len(child_grid)
-subsample_grid=[0.50,0.80]
+subsample_grid=[0.50,0.60]
 n_subsample=len(subsample_grid)
 num_round_grid=[50,100,200]
 n_num_round_grid=len(num_round_grid)
 gamma_grid=[0.0]
 n_gamma_grid=len(gamma_grid)
-colsample_grid=[0.80,0.85,0.90]
+colsample_grid=[0.70,0.75]
 n_colsample=len(colsample_grid)
 
 n_param_1=n_depth
