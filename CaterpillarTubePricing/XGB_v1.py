@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import datetime
-
+import operator
 import cPickle
 
 import numpy as np
@@ -21,14 +21,18 @@ https://github.com/dmlc/xgboost/blob/master/doc/parameter.md
 ####################################################################################
 ####################################################################################
 pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
 
 X_dat=np.array(pd.io.parsers.read_table('X_train.csv',sep=',',header=False))
+df_temp=pd.io.parsers.read_table('X_train.csv',sep=',',header=False)
+col_names=df_temp.columns
+del df_temp
 Y_dat=np.array(pd.io.parsers.read_table('Y_train.csv',sep=',',header=False))
+Y_dat=np.log1p(Y_dat)
 test_X=np.array(pd.io.parsers.read_table('X_test.csv',sep=',',header=False))
 
 indices=[i+1 for i in range(test_X.shape[0])]
@@ -53,7 +57,7 @@ np.random.shuffle(Y_dat)
 ####################################################################################
 sz = X_dat.shape
 
-frac=0.8
+frac=0.95
 train_X = X_dat[:int(sz[0] * frac), :]
 train_Y = Y_dat[:int(sz[0] * frac)]
 valid_X = X_dat[int(sz[0] * frac):, :]
@@ -71,12 +75,12 @@ param = {}
 param["objective"] = "reg:linear"
 param["eta"] = 0.01
 param["min_child_weight"] = 40
-param["subsample"] = 0.60
+param["subsample"] = 0.80
 param["colsample_bytree"] = 0.80
 param["scale_pos_weight"] = 1.0
 # param['gamma'] = 5
 param["silent"] = 1
-param["max_depth"] = 20
+param["max_depth"] = 25
 param['nthread'] = 4
 n_class=1
 param['num_class'] = n_class
@@ -84,21 +88,23 @@ num_round = 7000
 
 watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
 bst = xgb.train(param, xg_train, num_round, watchlist ,early_stopping_rounds=50);
+n_tree = bst.best_iteration
 print bst.get_fscore()
 # get prediction
-y_out = bst.predict( xg_valid );
-pred = np.array([np.max([0.0,x]) for x in y_out])
-print ('prediction error=%f' % (sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+pred = bst.predict( xg_valid,ntree_limit=n_tree );
+print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
 
 temp=bst.get_fscore()
 A=0
 for key in temp.keys():
     A+=temp[key]
 
+temp={col_names[int(temp.keys()[i][1:])]:temp.values()[i] for i in range(len(temp))}
+feat_imp_sort_XGB = sorted(temp.items(), key=operator.itemgetter(1))
 
-y_out = bst.predict( xg_test );
-y_test = np.array([np.max([0.0,x]) for x in y_out])
-df=pd.DataFrame(y_test)
+
+y_test = bst.predict( xg_test, ntree_limit=n_tree );
+df=pd.DataFrame(np.expm1(y_test))
 df.columns=['cost']
 df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
@@ -139,61 +145,13 @@ for ii in range(len(col_lists)):
         watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
         bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
         n_tree = bst.best_iteration
-        pred = bst.predict( xg_valid, ntree_limit=n_tree );
-
-        valid_rmse=np.sqrt(sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
+        
+        pred = bst.predict( xg_valid,ntree_limit=n_tree );
+        valid_rmse=np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) )
         X_folds[i,0]=valid_rmse
     X_mean[ii,0]=ii
     X_mean[ii,1:]=X_folds.mean(axis=0)
     print "iteration %i out of %g" %(ii+1,len(col_lists))
-####################################################################################
-####################################################################################
-####################################################################################
-#train model on full data set
-####################################################################################
-####################################################################################
-####################################################################################
-sz = X_dat.shape
-
-train_X = X_dat
-train_Y = Y_dat
-
-xg_train = xgb.DMatrix( train_X, label=train_Y)
-# setup parameters for xgboost
-param = {}
-# # use softmax multi-class classification
-# param['objective'] = 'multi:softmax'
-# scale weight of positive examples
-param['objective']='reg:linear'
-param['eval_metric']='rmse'
-param['max_depth'] = 5
-param["min_child_weight"] = 1
-param["subsample"] = 0.7
-# param["scale_pos_weight"] = 1.0
-param['alpha']=0.1
-# param['lambda']=0.01
-param['eta'] = 0.1
-param['silent'] = 0
-param['nthread'] = 4
-n_class=1
-param['num_class'] = n_class
-num_round = 100
-
-watchlist = [ (xg_train,'train') ]
-bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
-n_tree = bst.best_iteration
-pred = bst.predict( xg_train, ntree_limit=n_tree);
-
-print ('prediction error=%f' % (sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for i in range(len(train_Y))) / float(len(train_Y)) ))
-
-y_test = bst.predict( xg_test );
-df=pd.DataFrame(y_test)
-df.columns=['Hazard']
-indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
-df.insert(loc=0,column='Id',value=indices)
-# np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
-df.to_csv("XGB_predictions.csv",sep=",",index=False)
-
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -207,8 +165,8 @@ r0=range(sz[0])
 X_folds=np.zeros((len(p),1))
 n_test=test_X.shape[0]
 y_test_mat=np.zeros((n_test,len(p)))
-least_imp=[]
-feat_imp_mat=np.zeros((sz[1],len(p)))
+# least_imp=[]
+# feat_imp_mat=np.zeros((sz[1],len(p)))
 for i in p:
     r_valid=set(r0[int(p[i]*frac_*sz[0]):int((p[i]+1)*frac_*sz[0])])
     r_train=set(r0)-r_valid
@@ -223,95 +181,48 @@ for i in p:
     watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
     bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
     n_tree = bst.best_iteration
-    pred = bst.predict( xg_valid, ntree_limit=n_tree );
-    feat_imp = bst.get_fscore()
-    temp = np.array(feat_imp.values()).argmin()
-    least_imp.append(feat_imp.keys()[temp])
-
-
-    A=0
-    for key in feat_imp.keys():
-      A+=feat_imp[key]
-    feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
-
-    valid_rmse=np.sqrt(sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
+    pred = bst.predict( xg_valid,ntree_limit=n_tree );
+    valid_rmse=np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) )
     X_folds[i,0]=valid_rmse
-    y_test = bst.predict( xg_test, ntree_limit=n_tree );
-    y_test_mat[:,i]=y_test
+    y_test = bst.predict( xg_test, ntree_limit=n_tree);
+    y_test_mat[:,i]=np.expm1(y_test)
+    # feat_imp = bst.get_fscore()
+    # temp = np.array(feat_imp.values()).argmin()
+    # least_imp.append(feat_imp.keys()[temp])
+
+
+    # A=0
+    # for key in feat_imp.keys():
+    #   A+=feat_imp[key]
+    # feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
 #bag estimates from the model trained on different folds (no need to average since ranking only matter)
-y_bag=y_test_mat.sum(axis=1)
+weights=np.max(X_folds)-X_folds
+weights/=weights.sum()
+y_bag=np.array([weights[i]*y_test_mat[:,i] for i in range(len(weights))]).transpose()
+y_bag=y_test_mat.mean(axis=1)
 print X_folds.mean(axis=0)
 
-for i in range(5):
-    ind_min= feat_imp_mat.argsort(axis=0)[i,:]
-    keys_ind = [feat_imp.keys()[i] for i in ind_min]
-    keys_ind0 = [np.int(keys_ind[i][1:]) for i in range(len(keys_ind))]
-    print [col_names[i] for i in keys_ind0]
+# for i in range(5):
+#     ind_min= feat_imp_mat.argsort(axis=0)[i,:]
+#     keys_ind = [feat_imp.keys()[i] for i in ind_min]
+#     keys_ind0 = [np.int(keys_ind[i][1:]) for i in range(len(keys_ind))]
+#     print [col_names[i] for i in keys_ind0]
 
 df=pd.DataFrame(y_bag)
-df.columns=['Hazard']
-indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+df.columns=['cost']
 df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
+
+
+for i in p:
+    y_out = y_test_mat[:,i]
+    y_test = np.array([np.max([0.0,x]) for x in y_out])
+    y_test_mat[:,i]=y_test
 ####################################################################################
 ####################################################################################
 ####################################################################################
 # cross validation
-####################################################################################
-####################################################################################
-####################################################################################
-depth_grid=[1,3,5,10,20,40]
-n_depth=len(depth_grid)
-eta_grid=[0.1]
-n_eta=len(eta_grid)
-lambda_grid=[0.01]
-n_lambda=len(lambda_grid)
-child_grid=[1,2,3,5,7,10]
-n_child=len(child_grid)
-subsample_grid=[0.50,0.70,0.90]
-n_subsample=len(subsample_grid)
-
-X_cv=np.zeros((n_depth*n_lambda*n_child*n_subsample,5))
-ind=0
-for i in range(n_depth):
-      for j in range(n_lambda):
-            for k in range(n_child):
-                  for l in range(n_subsample):
-                        param = {}
-                        param['max_depth']=depth_grid[i]
-                        param['eta']=0.1
-                        param['lambda']=lambda_grid[j]
-                        param['alpha']=0.1
-                        param["subsample"] = subsample_grid[l]
-                        param['objective']='reg:linear'
-                        param['eval_metric']='rmse'
-                        param["min_child_weight"] = child_grid[k]
-                        # param["scale_pos_weight"] = 1.0
-                        param['silent'] = 1
-                        param['nthread'] = 4
-                        n_class=1
-                        param['num_class'] = n_class
-                        num_round = num_round_grid[i]
-
-                        watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-                        num_round = 100
-                        bst = xgb.train(param, xg_train, num_round, watchlist,early_stopping_rounds=50);
-                        n_tree = bst.best_iteration
-                        pred = bst.predict( xg_valid, ntree_limit=n_tree );
-
-                        X_cv[ind,0]=depth_grid[i]
-                        X_cv[ind,1]=lambda_grid[j]
-                        X_cv[ind,2]=child_grid[k]
-                        X_cv[ind,3]=subsample_grid[l]
-                        valid_rmse=np.sqrt(sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-                        X_cv[ind,4]=valid_rmse
-                        ind+=1
-                        print ind, valid_rmse, valid_gini
-
-df_cv=pd.DataFrame(X_cv)
-df_cv.to_csv('xgboost_cv_v2.csv')
-
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -326,21 +237,21 @@ y_test_mat=np.zeros((n_test,n_reps*n_folds))
 k_fold = cross_validation.KFold(n=sz[0], n_folds=n_folds,random_state=seed)
 
 #cv parameters
-depth_grid=[5,20,40]
+depth_grid=[40,50]
 n_depth=len(depth_grid)
 eta_grid=[0.01,0.1]
 n_eta=len(eta_grid)
 lambda_grid=[0.01,0.1]
 n_lambda=len(lambda_grid)
-child_grid=[20,25,30]
+child_grid=[25]
 n_child=len(child_grid)
-subsample_grid=[0.60,0.70,0.80]
+subsample_grid=[0.80]
 n_subsample=len(subsample_grid)
 num_round_grid=[50,100,200]
 n_num_round_grid=len(num_round_grid)
 gamma_grid=[0.0]
 n_gamma_grid=len(gamma_grid)
-colsample_grid=[0.60,0.70,0.80]
+colsample_grid=[0.80]
 n_colsample=len(colsample_grid)
 
 n_param_1=n_depth
@@ -378,7 +289,7 @@ for i in range(n_param_1):
                     param['nthread'] = 4
                     n_class=1
                     param['num_class'] = n_class
-                    num_round = 3000
+                    num_round = 7000
 
                     #cv folds and reps over the parameter set of interest
                     X_folds=np.zeros((n_reps*n_folds,2))
@@ -403,9 +314,8 @@ for i in range(n_param_1):
                             feat_imp = bst.get_fscore()
                             temp = np.array(feat_imp.values()).argmin()
                             least_imp.append(feat_imp.keys()[temp])
-                            y_out = bst.predict( xg_valid, ntree_limit=n_tree);
-                            pred = np.array([np.max([0.0,x]) for x in y_out])
-                            valid_rmse=np.sqrt(sum( (np.log(pred[i]+1.0) - np.log(valid_Y[i]+1.0))**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
+                            pred = bst.predict( xg_valid, ntree_limit=n_tree);                            
+                            valid_rmse=np.sqrt(sum( (pred[m]-valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)) )
                             X_folds[ind,0]=valid_rmse
                             ind+=1
                             # y_test = bst.predict( xg_test );

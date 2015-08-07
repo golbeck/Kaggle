@@ -15,8 +15,8 @@ import xgboost as xgb
 
 
 pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -96,6 +96,17 @@ from statsmodels.tools import categorical
 df_year=pd.DataFrame(categorical(X_time[:,0],drop=True),columns=cols_year)
 df_month=pd.DataFrame(categorical(X_time[:,1],drop=True),columns=cols_month)
 
+df_tube['end_a_1x']=pd.Categorical(df_tube['end_a_1x']).labels
+df_tube['end_a_2x']=pd.Categorical(df_tube['end_a_2x']).labels
+df_tube['end_x_1x']=pd.Categorical(df_tube['end_x_1x']).labels
+df_tube['end_x_2x']=pd.Categorical(df_tube['end_x_2x']).labels
+
+df_train_set=pd.merge(df_train_set, df_tube, on ='tube_assembly_id')
+
+df_train_set.drop('material_id', axis=1, inplace=True)
+df_train_set.drop('end_a', axis=1, inplace=True)
+df_train_set.drop('end_x', axis=1, inplace=True)
+
 df=pd.DataFrame()
 #fill out with zeros, one column for each specs category
 for i in tube_specs_unique:
@@ -174,6 +185,13 @@ from statsmodels.tools import categorical
 df_year=pd.DataFrame(categorical(X_time[:,0],drop=True),columns=list(set(X_time[:,0])))
 df_year=pd.concat([pd.DataFrame(np.zeros(n),columns=[1982]),df_year],axis=1)
 df_month=pd.DataFrame(categorical(X_time[:,1],drop=True),columns=cols_month)
+
+
+df_test_set=pd.merge(df_test_set, df_tube, on ='tube_assembly_id')
+
+df_test_set.drop('material_id', axis=1, inplace=True)
+df_test_set.drop('end_a', axis=1, inplace=True)
+df_test_set.drop('end_x', axis=1, inplace=True)
 
 #dataframe of features
 df=pd.DataFrame()
