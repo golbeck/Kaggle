@@ -21,8 +21,8 @@ https://github.com/dmlc/xgboost/blob/master/doc/parameter.md
 ####################################################################################
 ####################################################################################
 pwd_temp=os.getcwd()
-dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
 dir1=dir1+'/data' 
 if pwd_temp!=dir1:
     os.chdir(dir1)
@@ -74,13 +74,13 @@ param = {}
 
 param["objective"] = "reg:linear"
 param["eta"] = 0.01
-param["min_child_weight"] = 40
-param["subsample"] = 0.80
-param["colsample_bytree"] = 0.80
+param["min_child_weight"] = 18
+param["subsample"] = 0.55
+param["colsample_bytree"] = 0.87
 param["scale_pos_weight"] = 1.0
 # param['gamma'] = 5
 param["silent"] = 1
-param["max_depth"] = 25
+param["max_depth"] = 18
 param['nthread'] = 4
 n_class=1
 param['num_class'] = n_class
@@ -107,7 +107,62 @@ y_test = bst.predict( xg_test, ntree_limit=n_tree );
 df=pd.DataFrame(np.expm1(y_test))
 df.columns=['cost']
 df.insert(loc=0,column='Id',value=indices)
-# np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
+df.to_csv("XGB_predictions.csv",sep=",",index=False)
+
+####################################################################################
+####################################################################################
+####################################################################################
+#train model on full train set
+####################################################################################
+####################################################################################
+####################################################################################
+sz = X_dat.shape
+
+train_X = X_dat
+train_Y = Y_dat
+
+xg_train = xgb.DMatrix( train_X, label=train_Y)
+# setup parameters for xgboost
+param = {}
+# # use softmax multi-class classification
+# param['objective'] = 'multi:softmax'
+# scale weight of positive examples
+
+param["objective"] = "reg:linear"
+param["eta"] = 0.01
+param["min_child_weight"] = 18
+param["subsample"] = 0.55
+param["colsample_bytree"] = 0.87
+param["scale_pos_weight"] = 1.0
+# param['gamma'] = 5
+param["silent"] = 1
+param["max_depth"] = 18
+param['nthread'] = 4
+n_class=1
+param['num_class'] = n_class
+num_round = 7000
+
+watchlist = [ (xg_train,'train') ]
+bst = xgb.train(param, xg_train, num_round, watchlist ,early_stopping_rounds=50);
+n_tree = bst.best_iteration
+print bst.get_fscore()
+# get prediction
+pred = bst.predict( xg_valid,ntree_limit=n_tree );
+print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+
+temp=bst.get_fscore()
+A=0
+for key in temp.keys():
+    A+=temp[key]
+
+temp={col_names[int(temp.keys()[i][1:])]:temp.values()[i] for i in range(len(temp))}
+feat_imp_sort_XGB = sorted(temp.items(), key=operator.itemgetter(1))
+
+
+y_test = bst.predict( xg_test, ntree_limit=n_tree );
+df=pd.DataFrame(np.expm1(y_test))
+df.columns=['cost']
+df.insert(loc=0,column='Id',value=indices)
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
 
 ####################################################################################
@@ -191,14 +246,15 @@ for i in p:
     # least_imp.append(feat_imp.keys()[temp])
 
 
+    print "iteration %i out of %g" %(i+1,len(p))
     # A=0
     # for key in feat_imp.keys():
     #   A+=feat_imp[key]
     # feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
 #bag estimates from the model trained on different folds (no need to average since ranking only matter)
-weights=np.max(X_folds)-X_folds
-weights/=weights.sum()
-y_bag=np.array([weights[i]*y_test_mat[:,i] for i in range(len(weights))]).transpose()
+# weights=np.max(X_folds)-X_folds
+# weights/=weights.sum()
+# y_bag=np.array([weights[i]*y_test_mat[:,i] for i in range(len(weights))]).transpose()
 y_bag=y_test_mat.mean(axis=1)
 print X_folds.mean(axis=0)
 
@@ -213,12 +269,6 @@ df.columns=['cost']
 df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
-
-
-for i in p:
-    y_out = y_test_mat[:,i]
-    y_test = np.array([np.max([0.0,x]) for x in y_out])
-    y_test_mat[:,i]=y_test
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -237,21 +287,15 @@ y_test_mat=np.zeros((n_test,n_reps*n_folds))
 k_fold = cross_validation.KFold(n=sz[0], n_folds=n_folds,random_state=seed)
 
 #cv parameters
-depth_grid=[40,50]
+depth_grid=[18,22]
 n_depth=len(depth_grid)
-eta_grid=[0.01,0.1]
-n_eta=len(eta_grid)
-lambda_grid=[0.01,0.1]
-n_lambda=len(lambda_grid)
-child_grid=[25]
-n_child=len(child_grid)
-subsample_grid=[0.80]
-n_subsample=len(subsample_grid)
-num_round_grid=[50,100,200]
-n_num_round_grid=len(num_round_grid)
 gamma_grid=[0.0]
 n_gamma_grid=len(gamma_grid)
-colsample_grid=[0.80]
+child_grid=[18,22]
+n_child=len(child_grid)
+subsample_grid=[0.83,0.85,0.87]
+n_subsample=len(subsample_grid)
+colsample_grid=[0.50,0.55]
 n_colsample=len(colsample_grid)
 
 n_param_1=n_depth
