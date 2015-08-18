@@ -15,12 +15,12 @@ import theano.tensor as T
 import xgboost as xgb
 
 
-pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
-dir1=dir1+'/data' 
-if pwd_temp!=dir1:
-    os.chdir(dir1)
+# pwd_temp=os.getcwd()
+# # dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+# dir1=dir1+'/data' 
+# if pwd_temp!=dir1:
+#     os.chdir(dir1)
 
 #training set
 df_train_set=pd.io.parsers.read_table('train_set.csv',sep=',',header=0)
@@ -124,21 +124,26 @@ df_train_set['supplier']=lbl.transform(df_train_set['supplier'])
 df_test_set['supplier']=lbl.transform(df_test_set['supplier'])
 ##########################################################################################
 ##########################################################################################
+cols=['end_a_1x','end_a_2x','end_x_1x','end_x_2x','material_id','end_a','end_x']
+for i in range(len(cols)):
+    df_tube[cols[i]]=pd.Categorical(df_tube[cols[i]]).labels
 
-df_tube['end_a_1x']=pd.Categorical(df_tube['end_a_1x']).labels
-df_tube['end_a_2x']=pd.Categorical(df_tube['end_a_2x']).labels
-df_tube['end_x_1x']=pd.Categorical(df_tube['end_x_1x']).labels
-df_tube['end_x_2x']=pd.Categorical(df_tube['end_x_2x']).labels
+
+
+# df_tube['end_a_1x']=pd.Categorical(df_tube['end_a_1x']).labels
+# df_tube['end_a_2x']=pd.Categorical(df_tube['end_a_2x']).labels
+# df_tube['end_x_1x']=pd.Categorical(df_tube['end_x_1x']).labels
+# df_tube['end_x_2x']=pd.Categorical(df_tube['end_x_2x']).labels
 
 df_train_set=pd.merge(df_train_set, df_tube, on ='tube_assembly_id')
 df_test_set=pd.merge(df_test_set, df_tube, on ='tube_assembly_id')
 
-df_train_set.drop('material_id', axis=1, inplace=True)
-df_train_set.drop('end_a', axis=1, inplace=True)
-df_train_set.drop('end_x', axis=1, inplace=True)
-df_test_set.drop('material_id', axis=1, inplace=True)
-df_test_set.drop('end_a', axis=1, inplace=True)
-df_test_set.drop('end_x', axis=1, inplace=True)
+# df_train_set.drop('material_id', axis=1, inplace=True)
+# df_train_set.drop('end_a', axis=1, inplace=True)
+# df_train_set.drop('end_x', axis=1, inplace=True)
+# df_test_set.drop('material_id', axis=1, inplace=True)
+# df_test_set.drop('end_a', axis=1, inplace=True)
+# df_test_set.drop('end_x', axis=1, inplace=True)
 
 #join with train set
 df1=pd.concat([df_train_set,df_month_train],axis=1)

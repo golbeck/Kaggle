@@ -14,12 +14,12 @@ import theano.tensor as T
 import xgboost as xgb
 
 
-pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
-dir1=dir1+'/data' 
-if pwd_temp!=dir1:
-    os.chdir(dir1)
+# pwd_temp=os.getcwd()
+# # dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+# # dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+# dir1=dir1+'/data' 
+# if pwd_temp!=dir1:
+#     os.chdir(dir1)
 
 #training set
 df_train_set=pd.io.parsers.read_table('train_set.csv',sep=',',header=0)

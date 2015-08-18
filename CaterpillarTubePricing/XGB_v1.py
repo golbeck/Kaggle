@@ -20,12 +20,12 @@ https://github.com/dmlc/xgboost/blob/master/doc/parameter.md
 ####################################################################################
 ####################################################################################
 ####################################################################################
-pwd_temp=os.getcwd()
-# dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
-dir1=dir1+'/data' 
-if pwd_temp!=dir1:
-    os.chdir(dir1)
+# pwd_temp=os.getcwd()
+# # dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
+# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
+# dir1=dir1+'/data' 
+# if pwd_temp!=dir1:
+#     os.chdir(dir1)
 
 X_dat=np.array(pd.io.parsers.read_table('X_train.csv',sep=',',header=False))
 df_temp=pd.io.parsers.read_table('X_train.csv',sep=',',header=False)
@@ -74,13 +74,13 @@ param = {}
 
 param["objective"] = "reg:linear"
 param["eta"] = 0.01
-param["min_child_weight"] = 18
+param["min_child_weight"] = 10
 param["subsample"] = 0.55
 param["colsample_bytree"] = 0.87
 param["scale_pos_weight"] = 1.0
 # param['gamma'] = 5
 param["silent"] = 1
-param["max_depth"] = 18
+param["max_depth"] = 30
 param['nthread'] = 4
 n_class=1
 param['num_class'] = n_class
@@ -130,13 +130,13 @@ param = {}
 
 param["objective"] = "reg:linear"
 param["eta"] = 0.01
-param["min_child_weight"] = 18
+param["min_child_weight"] = 10
 param["subsample"] = 0.55
 param["colsample_bytree"] = 0.87
 param["scale_pos_weight"] = 1.0
 # param['gamma'] = 5
 param["silent"] = 1
-param["max_depth"] = 18
+param["max_depth"] = 30
 param['nthread'] = 4
 n_class=1
 param['num_class'] = n_class
@@ -287,15 +287,15 @@ y_test_mat=np.zeros((n_test,n_reps*n_folds))
 k_fold = cross_validation.KFold(n=sz[0], n_folds=n_folds,random_state=seed)
 
 #cv parameters
-depth_grid=[18,22]
+depth_grid=[25]
 n_depth=len(depth_grid)
 gamma_grid=[0.0]
 n_gamma_grid=len(gamma_grid)
-child_grid=[18,22]
+child_grid=[15]
 n_child=len(child_grid)
-subsample_grid=[0.83,0.85,0.87]
+subsample_grid=[0.87]
 n_subsample=len(subsample_grid)
-colsample_grid=[0.50,0.55]
+colsample_grid=[0.50]
 n_colsample=len(colsample_grid)
 
 n_param_1=n_depth
@@ -333,7 +333,7 @@ for i in range(n_param_1):
                     param['nthread'] = 4
                     n_class=1
                     param['num_class'] = n_class
-                    num_round = 7000
+                    num_round = 1000
 
                     #cv folds and reps over the parameter set of interest
                     X_folds=np.zeros((n_reps*n_folds,2))

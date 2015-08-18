@@ -69,20 +69,20 @@ test.fillna(0, inplace = True)
 print("train columns")
 print(train.columns)
 
-# convert data to numpy array
-train = np.array(train)
-test = np.array(test)
 
 
 # label encode the categorical variables
 for i in range(train.shape[1]):
     if i in [0,3,5,11,12,13,14,15,16,20,22,24,26,28,30,32,34]:
-        print(i,list(train[1:5,i]) + list(test[1:5,i]))
+        print(i,list(train.ix[1:5,i]) + list(test.ix[1:5,i]))
         lbl = preprocessing.LabelEncoder()
-        lbl.fit(list(train[:,i]) + list(test[:,i]))
-        train[:,i] = lbl.transform(train[:,i])
-        test[:,i] = lbl.transform(test[:,i])
+        lbl.fit(list(train.ix[:,i]) + list(test.ix[:,i]))
+        train.ix[:,i] = lbl.transform(train.ix[:,i])
+        test.ix[:,i] = lbl.transform(test.ix[:,i])
 
+# convert data to numpy array
+train = np.array(train)
+test = np.array(test)
 
 # object array to float
 train = train.astype(float)
