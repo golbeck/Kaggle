@@ -1,4 +1,5 @@
-
+#model uses 1-of-K encoding on categorical variables
+#total of 38 features
 import os
 import sys
 import time
