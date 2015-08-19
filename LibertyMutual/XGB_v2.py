@@ -76,10 +76,10 @@ def xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names):
         least_imp.append(feat_imp.keys()[temp])
 
 
-        A=0
-        for key in feat_imp.keys():
-          A+=feat_imp[key]
-        feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
+        # A=0
+        # for key in feat_imp.keys():
+        #   A+=feat_imp[key]
+        # feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
 
         valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
         valid_gini=Gini(valid_Y, pred)
@@ -101,7 +101,8 @@ def xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names):
     df.columns=['Hazard']
     indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
     df.insert(loc=0,column='Id',value=indices)
-    return df
+    # return df
+    return X_folds.mean(axis=0)
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -201,7 +202,7 @@ sz = X_dat.shape
 
 frac=0.98
 train_X = X_dat[:int(sz[0] * frac), :]
-y_pow=1.0/1.0
+y_pow=2.0/1.0
 train_Y = np.power(Y_dat[:int(sz[0] * frac)],y_pow)
 valid_X = X_dat[int(sz[0] * frac):, :]
 valid_Y = np.power(Y_dat[int(sz[0] * frac):],y_pow)
@@ -373,8 +374,15 @@ df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 m=20
-df=xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names)
-df.to_csv("XGB_predictions.csv",sep=",",index=False)
+y_pow_vec=[1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5]
+n_pow=len(y_pow_vec)
+X_folds=np.zeros((n_pow,3))
+num_round=7000
+for i in range(n_pow):
+    y_pow=y_pow_vec[i]
+    df=xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names)
+    X_folds[i,0]=y_pow
+    X_folds[i,1:]=df
 ####################################################################################
 ####################################################################################
 ####################################################################################
