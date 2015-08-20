@@ -70,23 +70,22 @@ test.fillna(0, inplace = True)
 print("train columns")
 print(train.columns)
 
-# convert data to numpy array
-train = np.array(train)
-test = np.array(test)
-
 
 # label encode the categorical variables
 for i in range(train.shape[1]):
     if i in [0,3,5,11,12,13,14,15,16,20,22,24,26,28,30,32,34]:
-        print(i,list(train[1:5,i]) + list(test[1:5,i]))
+        print(i,list(train.ix[1:5,i]) + list(test.ix[1:5,i]))
         lbl = preprocessing.LabelEncoder()
-        lbl.fit(list(train[:,i]) + list(test[:,i]))
-        train[:,i] = lbl.transform(train[:,i])
-        test[:,i] = lbl.transform(test[:,i])
+        lbl.fit(list(train.ix[:,i]) + list(test.ix[:,i]))
+        train.ix[:,i] = lbl.transform(train.ix[:,i])
+        test.ix[:,i] = lbl.transform(test.ix[:,i])
 
 
+# convert data to numpy array
+train = np.array(train)
+test = np.array(test)
 # object array to float
-train_X = train.astype(float)
+train = train.astype(float)
 test = test.astype(float)
 
 # i like to train on log(1+x) for RMSLE ;) 
@@ -110,53 +109,29 @@ plst = list(params.items())
 
 
 sz = train.shape
-
-frac=0.95
-train = train_X[:int(sz[0] * frac), :]
-train_Y = label_log[:int(sz[0] * frac)]
-valid_X = train_X[int(sz[0] * frac):, :]
-valid_Y = label_log[int(sz[0] * frac):]
-
-xg_train = xgb.DMatrix( train, label=train_Y)
-xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
+xg_train = xgb.DMatrix( train, label=label_log)
 xgtest = xgb.DMatrix(test)
+watchlist = [ (xg_train,'train') ]
 
 print('2000')
 
 
 num_round = 2000
-watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-bst = xgb.train(params, xg_train, num_round, watchlist ,early_stopping_rounds=50);
-n_tree = bst.best_iteration
-print bst.get_fscore()
-# get prediction
-pred = bst.predict( xg_valid,ntree_limit=n_tree );
-print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+bst = xgb.train(params, xg_train, num_round);
 preds1 = bst.predict(xgtest)
 
 print('3000')
 
 num_round = 3000
 
-watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-bst = xgb.train(params, xg_train, num_round, watchlist ,early_stopping_rounds=50);
-n_tree = bst.best_iteration
-print bst.get_fscore()
-# get prediction
-pred = bst.predict( xg_valid,ntree_limit=n_tree );
-print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+
+bst = xgb.train(params, xg_train, num_round);
 preds2 = bst.predict(xgtest)
 
 print('4000')
 
 num_round = 4000
-watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-bst = xgb.train(params, xg_train, num_round, watchlist ,early_stopping_rounds=50);
-n_tree = bst.best_iteration
-print bst.get_fscore()
-# get prediction
-pred = bst.predict( xg_valid,ntree_limit=n_tree );
-print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+bst = xgb.train(params, xg_train, num_round);
 preds4 = bst.predict(xgtest)
 
 label_log = np.power(labels,1/16)
@@ -168,13 +143,8 @@ print('power 1/16 4000')
 
 num_round = 4000
 
-watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-bst = xgb.train(params, xg_train, num_round, watchlist ,early_stopping_rounds=50);
-n_tree = bst.best_iteration
-print bst.get_fscore()
-# get prediction
-pred = bst.predict( xg_valid,ntree_limit=n_tree );
-print ('prediction error=%f' % np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) ))
+watchlist = [ (xg_train,'train') ]
+bst = xgb.train(params, xg_train, num_round);
 preds3 = bst.predict(xgtest)
 
 #for loop in range(2):

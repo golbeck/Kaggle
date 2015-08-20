@@ -1,4 +1,6 @@
-
+# 136 features, with component types (29 total) in separate columns, 
+# with quantities of each as the entries for each tube assembly;
+# separate columns also for each tube specification (85)
 import os
 import sys
 import time
@@ -253,10 +255,3 @@ df1.fillna(0, inplace = True)
 df2.fillna(0, inplace = True)
 df1.to_csv("X_train.csv",header=True,index=False)
 df2.to_csv("X_test.csv",header=True,index=False)
-
-
-temp=df1.corr()
-m=temp.shape[0]
-for i in range(m):
-    for j in range(m):
-        

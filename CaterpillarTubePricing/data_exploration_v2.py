@@ -1,4 +1,5 @@
-
+# 51 features, with component types (29 total) in separate columns, 
+# with quantities of each as the entries for each tube assembly
 import os
 import sys
 import time

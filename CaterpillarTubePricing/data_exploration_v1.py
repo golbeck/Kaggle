@@ -1,4 +1,4 @@
-#model uses 1-of-K encoding on categorical variables
+#model encodes each categorical variable as a set of integers in a single columns
 #total of 38 features
 import os
 import sys
@@ -63,6 +63,18 @@ for j in [2*i+1 for i in range(8)]:
     lbl = preprocessing.LabelEncoder()
     lbl.fit(list(df_bill_of_materials[df_bill_of_materials.columns[j]]))
     df_bill_of_materials.ix[:,j]=lbl.transform(df_bill_of_materials.ix[:,j])
+
+
+mat_list=[]
+for j in [2*i+1 for i in range(8)]:
+    mat_list=mat_list+list(df_bill_of_materials[df_bill_of_materials.columns[j]])
+
+lbl = preprocessing.LabelEncoder()
+lbl.fit(mat_list)
+
+for j in [2*i+1 for i in range(8)]:
+    df_bill_of_materials.ix[:,j]=lbl.transform(df_bill_of_materials.ix[:,j])
+
 
 #merge with train and test sets
 df_train_set=pd.merge(df_train_set, df_bill_of_materials, on ='tube_assembly_id')

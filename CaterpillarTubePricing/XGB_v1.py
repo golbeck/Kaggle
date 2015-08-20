@@ -1,3 +1,4 @@
+#train on one full subset of the data (no separate trainers for bracket pricing)
 
 import os
 import sys
@@ -40,14 +41,14 @@ indices=[i+1 for i in range(test_X.shape[0])]
 n=X_dat.shape[0]
 sz = X_dat.shape
 
-#shuffle train set
-seed=1234
-np.random.seed(seed=seed)
-rng_state = np.random.get_state()
-#randomly permuate the features and outputs using the same shuffle for each epoch
-np.random.shuffle(X_dat)
-np.random.set_state(rng_state)
-np.random.shuffle(Y_dat)        
+# #shuffle train set
+# seed=1234
+# np.random.seed(seed=seed)
+# rng_state = np.random.get_state()
+# #randomly permuate the features and outputs using the same shuffle for each epoch
+# np.random.shuffle(X_dat)
+# np.random.set_state(rng_state)
+# np.random.shuffle(Y_dat)        
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -269,6 +270,74 @@ df.columns=['cost']
 df.insert(loc=0,column='Id',value=indices)
 # np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
+####################################################################################
+####################################################################################
+####################################################################################
+# bag estimates from non-overlapping folds, and look at holdout set performance
+####################################################################################
+####################################################################################
+####################################################################################
+frac=0.05
+r0=range(sz[0])
+r_holdout=set(r0[0:int(frac*sz[0])])
+r_train=set(r0)-r_holdout
+holdout_indices=[x for x in r_holdout]
+train_indices=[y for y in r_train]
+holdout_X = X_dat[holdout_indices, :]
+holdout_Y = Y_dat[holdout_indices]
+
+xg_holdout = xgb.DMatrix( holdout_X, label=holdout_Y)
+
+X_cv_train = X_dat[train_indices, :]
+Y_cv_train = Y_dat[train_indices]
+
+p=range(20)
+frac_=0.05
+sz=X_cv_train.shape
+r0=range(sz[0])
+X_folds=np.zeros((len(p),2))
+n_test=holdout_X.shape[0]
+y_holdout_mat=np.zeros((n_test,len(p)))
+# least_imp=[]
+# feat_imp_mat=np.zeros((sz[1],len(p)))
+for i in p:
+    r_valid=set(r0[int(p[i]*frac_*sz[0]):int((p[i]+1)*frac_*sz[0])])
+    r_train=set(r0)-r_valid
+    r_valid_indices=[x for x in r_valid]
+    r_train_indices=[y for y in r_train]
+    train_X = X_cv_train[r_train_indices, :]
+    train_Y = Y_cv_train[r_train_indices]
+    valid_X = X_cv_train[r_valid_indices, :]
+    valid_Y = Y_cv_train[r_valid_indices]
+    xg_train = xgb.DMatrix( train_X, label=train_Y)
+    xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
+    watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
+    bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
+    n_tree = bst.best_iteration
+    pred = bst.predict( xg_valid,ntree_limit=n_tree );
+    valid_rmse=np.sqrt(sum( (pred[i]-valid_Y[i])**2 for i in range(len(valid_Y))) / float(len(valid_Y)) )
+    X_folds[i,0]=valid_rmse
+    y_holdout = bst.predict( xg_holdout, ntree_limit=n_tree);
+    y_holdout_mat[:,i]=np.expm1(y_holdout)
+    holdout_rmse=np.sqrt(sum( (y_holdout[i]-holdout_Y[i])**2 for i in range(len(holdout_Y))) / float(len(holdout_Y)) )
+    X_folds[i,1]=holdout_rmse
+    # feat_imp = bst.get_fscore()
+    # temp = np.array(feat_imp.values()).argmin()
+    # least_imp.append(feat_imp.keys()[temp])
+
+
+    print "iteration %i out of %g" %(i+1,len(p))
+    # A=0
+    # for key in feat_imp.keys():
+    #   A+=feat_imp[key]
+    # feat_imp_mat[:,i]=np.array(feat_imp.values(),dtype=np.float)/A
+#bag estimates from the model trained on different folds (no need to average since ranking only matter)
+# weights=np.max(X_folds)-X_folds
+# weights/=weights.sum()
+# y_bag=np.array([weights[i]*y_test_mat[:,i] for i in range(len(weights))]).transpose()
+y_bag=y_holdout_mat.mean(axis=1)
+holdout_rmse=np.sqrt(sum( (y_bag[i]-holdout_Y[i])**2 for i in range(len(holdout_Y))) / float(len(holdout_Y)) )
+print X_folds.mean(axis=0)
 ####################################################################################
 ####################################################################################
 ####################################################################################
