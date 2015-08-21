@@ -694,12 +694,8 @@ pred_0=xgb_train_full(y_pow[0],train_X,train_Y,test_X,param,num_round)
 pred_1=xgb_train_full(y_pow[1],train_X,train_Y,test_X,param,num_round)
 pred_2=xgb_train_full(y_pow[2],train_X,train_Y,test_X,param,num_round)
 
-alpha_=0.2
-beta_=0.4
-preds=(2.0-alpha_-beta_)*pred_0+
-alpha_=0.5
-beta_=0.5
-preds=alpha_*pred_1+beta_*pred_2
+
+
 df=pd.DataFrame(preds)
 df.columns=['Hazard']
 indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')

@@ -1,5 +1,5 @@
 #model encodes each categorical variable as a set of integers in a single columns
-#total of 40 features
+#total of 42 features
 import os
 import sys
 import time
@@ -164,7 +164,6 @@ df1=pd.concat([df_train_set,df_month_train],axis=1)
 #remove supplier, tube_assembly_id
 df1.drop('quote_date', axis=1, inplace=True)
 # df1.drop("supplier", axis=1, inplace=True)
-df1.drop("tube_assembly_id", axis=1, inplace=True)
 df1['bracket_pricing']=pd.Categorical(df1['bracket_pricing']).labels
 
 del df_train_set, df_month_train, df_tube
@@ -182,9 +181,10 @@ df2=pd.concat([df_test_set,df_month_test],axis=1)
 df2.drop("id", axis=1, inplace=True)
 df2.drop('quote_date', axis=1, inplace=True)
 # df2.drop("supplier", axis=1, inplace=True)
-df2.drop("tube_assembly_id", axis=1, inplace=True)
 df2['bracket_pricing']=pd.Categorical(df2['bracket_pricing']).labels
 
+# df1.drop("tube_assembly_id", axis=1, inplace=True)
+df2.drop("tube_assembly_id", axis=1, inplace=True)
 del df_test_set, df_month_test
 
 
@@ -202,3 +202,4 @@ df2['tube_mat_vol']=df2['tube_mat_area']*df2['length']
 Y_train.to_csv("Y_train.csv",header=True,index=False)
 df1.to_csv("X_train.csv",header=True,index=False)
 df2.to_csv("X_test.csv",header=True,index=False)
+
