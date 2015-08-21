@@ -47,7 +47,7 @@ def Gini(y_true, y_pred):
 ####################################################################################
 def xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names):
     p=range(m)
-    frac_=1.0/m
+    frac=1.0/m
     r0=range(sz[0])
     X_folds=np.zeros((len(p),2))
     n_test=test_X.shape[0]
@@ -55,25 +55,27 @@ def xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names):
     least_imp=[]
     feat_imp_mat=np.zeros((sz[1],len(p)))
     for i in p:
-        r_valid=set(r0[int(p[i]*frac_*sz[0]):int((p[i]+1)*frac_*sz[0])])
+        #randomly select without replacement the validation set for each fold
+        r_valid=set(np.random.choice(range(sz[0]),size=int(frac*sz[0]),replace=False))
+        # r_valid=set(r0[int(p[i]*frac*sz[0]):int((p[i]+1)*frac*sz[0])])
         r_train=set(r0)-r_valid
         r_valid_indices=[x for x in r_valid]
         r_train_indices=[y for y in r_train]
         train_X = X_dat[r_train_indices, :]
-        train_Y = np.power(Y_dat[r_train_indices],y_pow)
+        train_Y = np.power(Y_dat[r_train_indices],1.0/y_pow)
         valid_X = X_dat[r_valid_indices, :]
-        valid_Y = np.power(Y_dat[r_valid_indices],y_pow)
+        valid_Y = np.power(Y_dat[r_valid_indices],1.0/y_pow)
         xg_train = xgb.DMatrix( train_X, label=train_Y)
         xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
         watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
         bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50);
         n_tree = bst.best_iteration
         pred = bst.predict( xg_valid, ntree_limit=n_tree );
-        pred = np.power(pred,1.0/y_pow)
-        valid_Y = np.power(valid_Y,1.0/y_pow)
-        feat_imp = bst.get_fscore()
-        temp = np.array(feat_imp.values()).argmin()
-        least_imp.append(feat_imp.keys()[temp])
+        pred = np.power(pred,y_pow)
+        valid_Y = np.power(valid_Y,y_pow)
+        # feat_imp = bst.get_fscore()
+        # temp = np.array(feat_imp.values()).argmin()
+        # least_imp.append(feat_imp.keys()[temp])
 
 
         # A=0
@@ -85,24 +87,38 @@ def xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names):
         valid_gini=Gini(valid_Y, pred)
         X_folds[i,0]=valid_rmse
         X_folds[i,1]=valid_gini
-        y_test = bst.predict( xg_test, ntree_limit=n_tree );
-        y_test_mat[:,i]=np.power(y_test,1.0/y_pow)
-    #bag estimates from the model trained on different folds (no need to average since ranking only matter)
-    y_bag=y_test_mat.sum(axis=1)
+    #     y_test = bst.predict( xg_test, ntree_limit=n_tree );
+    #     y_test_mat[:,i]=np.power(y_test,y_pow)
+    # #bag estimates from the model trained on different folds (no need to average since ranking only matter)
+    # y_bag=y_test_mat.sum(axis=1)
     print X_folds.mean(axis=0)
 
-    for i in range(5):
-        ind_min= feat_imp_mat.argsort(axis=0)[i,:]
-        keys_ind = [feat_imp.keys()[i] for i in ind_min]
-        keys_ind0 = [np.int(keys_ind[i][1:]) for i in range(len(keys_ind))]
-        print [col_names[i] for i in keys_ind0]
+    # for i in range(5):
+    #     ind_min= feat_imp_mat.argsort(axis=0)[i,:]
+    #     keys_ind = [feat_imp.keys()[i] for i in ind_min]
+    #     keys_ind0 = [np.int(keys_ind[i][1:]) for i in range(len(keys_ind))]
+    #     print [col_names[i] for i in keys_ind0]
 
-    df=pd.DataFrame(y_bag)
-    df.columns=['Hazard']
-    indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
-    df.insert(loc=0,column='Id',value=indices)
+    # df=pd.DataFrame(y_bag)
+    # df.columns=['Hazard']
+    # indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+    # df.insert(loc=0,column='Id',value=indices)
     # return df
     return X_folds.mean(axis=0)
+####################################################################################
+####################################################################################
+####################################################################################
+def xgb_train_full(y_pow,train_X,Y_dat,test_X,param,num_round):
+
+    train_Y = np.power(Y_dat,1.0/y_pow)
+    xg_train = xgb.DMatrix( train_X, label=train_Y)
+    xg_test = xgb.DMatrix(test_X)
+    watchlist = [ (xg_train,'train') ]
+    bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
+    n_tree = bst.best_iteration
+    pred = bst.predict( xg_test, ntree_limit=n_tree );
+    pred = np.power(pred,y_pow)
+    return pred
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -183,36 +199,7 @@ del dat, df
 n=X_dat.shape[0]
 sz = X_dat.shape
 
-#shuffle train set
-seed=1234
-np.random.seed(seed=seed)
-rng_state = np.random.get_state()
-#randomly permuate the features and outputs using the same shuffle for each epoch
-np.random.shuffle(X_dat)
-np.random.set_state(rng_state)
-np.random.shuffle(Y_dat)        
-####################################################################################
-####################################################################################
-####################################################################################
-#train model on fraction of data set and validate on left out data
-####################################################################################
-####################################################################################
-####################################################################################
-sz = X_dat.shape
-
-frac=0.98
-train_X = X_dat[:int(sz[0] * frac), :]
-y_pow=2.0/1.0
-train_Y = np.power(Y_dat[:int(sz[0] * frac)],y_pow)
-valid_X = X_dat[int(sz[0] * frac):, :]
-valid_Y = np.power(Y_dat[int(sz[0] * frac):],y_pow)
-# train_Y = np.log(Y_dat[:int(sz[0] * frac)])
-# valid_X = X_dat[int(sz[0] * frac):, :]
-# valid_Y = np.log(Y_dat[int(sz[0] * frac):])
-
-xg_train = xgb.DMatrix( train_X, label=train_Y)
-xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
-xg_test = xgb.DMatrix(test_X)
+     
 # setup parameters for xgboost
 param = {}
 # # use softmax multi-class classification
@@ -230,7 +217,53 @@ param["max_depth"] = 10
 param['nthread'] = 4 
 param['num_class'] = 1 
 num_round = 7000
+####################################################################################
+####################################################################################
+####################################################################################
+# run m-folds CV to determine OOS performance of each model
+####################################################################################
+####################################################################################
+####################################################################################
+m=20
+y_pow_vec=[1.0,1.1,1.2,1.5,2.0,3.0,4.0,8.0,16.0]
+n_pow=len(y_pow_vec)
+X_folds=np.zeros((n_pow,3))
+num_round=7000
+for i in range(n_pow):
+    y_pow=y_pow_vec[i]
+    df=xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names)
+    X_folds[i,0]=y_pow
+    X_folds[i,1:]=df
+####################################################################################
+####################################################################################
+####################################################################################
+#Quick, rough, dirty CV: train model on fraction of data set and validate on left out data
+####################################################################################
+####################################################################################
+####################################################################################
+#shuffle train set
+seed=1234
+np.random.seed(seed=seed)
+rng_state = np.random.get_state()
+#randomly permuate the features and outputs using the same shuffle for each epoch
+np.random.shuffle(X_dat)
+np.random.set_state(rng_state)
+np.random.shuffle(Y_dat)   
+sz = X_dat.shape
 
+frac=0.98
+train_X = X_dat[:int(sz[0] * frac), :]
+y_pow=2.0/1.0
+train_Y = np.power(Y_dat[:int(sz[0] * frac)],y_pow)
+valid_X = X_dat[int(sz[0] * frac):, :]
+valid_Y = np.power(Y_dat[int(sz[0] * frac):],y_pow)
+# train_Y = np.log(Y_dat[:int(sz[0] * frac)])
+# valid_X = X_dat[int(sz[0] * frac):, :]
+# valid_Y = np.log(Y_dat[int(sz[0] * frac):])
+
+xg_train = xgb.DMatrix( train_X, label=train_Y)
+xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
+xg_test = xgb.DMatrix(test_X)
 watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
 bst = xgb.train(param, xg_train, num_round, watchlist ,early_stopping_rounds=50);
 print bst.get_fscore()
@@ -366,23 +399,7 @@ indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
 df.insert(loc=0,column='Id',value=indices)
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
 
-####################################################################################
-####################################################################################
-####################################################################################
-# bag estimates from non-overlapping folds
-####################################################################################
-####################################################################################
-####################################################################################
-m=20
-y_pow_vec=[1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5]
-n_pow=len(y_pow_vec)
-X_folds=np.zeros((n_pow,3))
-num_round=7000
-for i in range(n_pow):
-    y_pow=y_pow_vec[i]
-    df=xgb_bagged(m,y_pow,test_X,X_dat,param,num_round,col_names)
-    X_folds[i,0]=y_pow
-    X_folds[i,1:]=df
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -608,3 +625,83 @@ for i in range(n_param_1):
 
 df_cv=pd.DataFrame(X_cv)
 df_cv.to_csv('xgboost_cv_v2.csv')
+
+
+
+
+####################################################################################
+####################################################################################
+####################################################################################
+
+param["objective"] = "reg:linear" 
+param["eta"] = 0.01
+param["min_child_weight"] = 25 
+param["subsample"] = 0.8 
+param["colsample_bytree"] = 0.85 
+param["scale_pos_weight"] = 1.0 
+param["silent"] = 1 
+param["max_depth"] = 10 
+param['nthread'] = 4 
+param['num_class'] = 1 
+num_round = 2000
+
+frac=0.05
+sz=X_dat.shape
+r0=range(sz[0])
+
+n_holdout=int(frac*sz[0])
+
+alpha=[0.40,0.50,0.60]
+beta=[0.40,0.50,0.60]
+p=len(alpha)*len(beta)
+#['gamma','alpha','beta','gini']
+y_pow=[2.0,3.0,8.0]
+iind=0
+folds=1
+y_holdout_mat=np.zeros((p*folds,4))
+for ii in range(folds):
+    r_holdout=set(np.random.choice(range(sz[0]),size=int(frac*sz[0]),replace=False))
+    # r_holdout=set(r0[0:int(frac*sz[0])])
+    r_train=set(r0)-r_holdout
+    holdout_indices=[x for x in r_holdout]
+    train_indices=[y for y in r_train]
+    holdout_X = X_dat[holdout_indices, :]
+    holdout_Y = Y_dat[holdout_indices]
+
+    xg_holdout = xgb.DMatrix( holdout_X, label=holdout_Y)
+
+    X_cv_train = X_dat[train_indices, :]
+    Y_cv_train = Y_dat[train_indices]
+
+    pred_0=xgb_train_full(y_pow[0],X_cv_train,Y_cv_train,holdout_X,param,num_round)
+    pred_1=xgb_train_full(y_pow[1],X_cv_train,Y_cv_train,holdout_X,param,num_round)
+    pred_2=xgb_train_full(y_pow[2],X_cv_train,Y_cv_train,holdout_X,param,num_round)
+    for i in range(len(alpha)):
+        for j in range(len(beta)):
+            preds=(1.4-alpha[i]-beta[j])*pred_0+alpha[i]*pred_1+beta[j]*pred_2
+            y_holdout_mat[iind,0:3]=[(1.4-alpha[i]-beta[j]),alpha[i],beta[j]]
+            y_holdout_mat[iind,3]=Gini(holdout_Y, preds)
+            iind+=1
+    print y_holdout_mat
+
+#train on full dataset
+sz = X_dat.shape
+
+train_X = X_dat
+train_Y = Y_dat
+num_round=7000
+pred_0=xgb_train_full(y_pow[0],train_X,train_Y,test_X,param,num_round)
+pred_1=xgb_train_full(y_pow[1],train_X,train_Y,test_X,param,num_round)
+pred_2=xgb_train_full(y_pow[2],train_X,train_Y,test_X,param,num_round)
+
+alpha_=0.2
+beta_=0.4
+preds=(2.0-alpha_-beta_)*pred_0+
+alpha_=0.5
+beta_=0.5
+preds=alpha_*pred_1+beta_*pred_2
+df=pd.DataFrame(preds)
+df.columns=['Hazard']
+indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+df.insert(loc=0,column='Id',value=indices)
+df.to_csv("XGB_predictions.csv",sep=",",index=False)

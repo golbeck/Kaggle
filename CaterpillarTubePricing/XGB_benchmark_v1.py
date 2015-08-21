@@ -150,7 +150,7 @@ preds3 = bst.predict(xgtest)
 #for loop in range(2):
 #    model = xgb.train(plst, xgtrain, num_rounds)
 #    preds1 = preds1 + model.predict(xgtest)
-preds = 0.4*np.expm1(preds4)+.1*np.expm1(preds1)+0.1*np.expm1(preds2)+0.4*np.power(preds3,16)
+preds = 0.4*np.expm1(preds4)+0.1*np.expm1(preds1)+0.1*np.expm1(preds2)+0.4*np.power(preds3,16)
 #preds = (0.58*np.expm1( (preds1+preds2+preds4)/3))+(0.42*np.power(preds3,16))
 
 preds = pd.DataFrame({"id": idx, "cost": preds})
