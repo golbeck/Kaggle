@@ -42,23 +42,72 @@ def Gini(y_true, y_pred):
     
     # normalize to true Gini coefficient
     return G_pred/G_true
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
-def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,param,num_round):
+def xgb_train_full(y_pow,train_X,Y_dat,test_X,param,num_round):
 
     train_Y = np.power(Y_dat,1.0/y_pow)
     xg_train = xgb.DMatrix( train_X, label=train_Y)
-    xg_valid = xgb.DMatrix(valid_X)
-    xg_holdout = xgb.DMatrix(holdout_X)
+    xg_test = xgb.DMatrix(test_X)
     watchlist = [ (xg_train,'train') ]
     bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
     n_tree = bst.best_iteration
-    pred_valid = bst.predict( xg_valid, ntree_limit=n_tree );
-    pred_valid = np.power(pred_valid,y_pow)
-    pred_holdout = bst.predict( xg_holdout, ntree_limit=n_tree );
-    pred_holdout = np.power(pred_holdout,y_pow)
-    return [pred_valid,pred_holdout]
+    pred = bst.predict( xg_test, ntree_limit=n_tree );
+    pred = np.power(pred,y_pow)
+    return pred
+####################################################################################
+####################################################################################
+####################################################################################
+def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,test_X,param,num_round,log_ind):
+    #transform training labels
+    if log_ind==1.0:
+        train_Y = np.log1p(Y_dat)
+    else:
+        train_Y = np.power(Y_dat,1.0/y_pow)
+
+    #setup train, validation and holdout inputs to XGB
+    xg_train = xgb.DMatrix( train_X, label=train_Y)
+    xg_valid = xgb.DMatrix(valid_X)
+    xg_holdout = xgb.DMatrix(holdout_X)
+    xg_test = xgb.DMatrix(test_X)
+
+    #train model
+    watchlist = [ (xg_train,'train') ]
+    bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
+    n_tree = bst.best_iteration
+
+    #predict on validation set, which will be used for fitting the blended model
+    pred_valid = bst.predict( xg_valid, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_valid = np.expm1(pred_valid)
+    else:
+        pred_valid = np.power(pred_valid,y_pow)
+
+    #predict on holdout set
+    pred_holdout = bst.predict( xg_holdout, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_holdout = np.expm1(pred_holdout)
+    else:
+        pred_holdout = np.power(pred_holdout,y_pow)
+
+
+    #predict on holdout set
+    pred_test = bst.predict( xg_test, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_test = np.expm1(pred_test)
+    else:
+        pred_test = np.power(pred_test,y_pow)
+
+    #return predictions
+    return [pred_valid,pred_holdout,pred_test]
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -157,6 +206,7 @@ param["max_depth"] = 10
 param['nthread'] = 4 
 param['num_class'] = 1 
 num_round = 7000
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -165,7 +215,7 @@ num_round = 7000
 ####################################################################################
 ####################################################################################
 #shuffle train set
-seed=1234
+seed=3456
 np.random.seed(seed=seed)
 rng_state = np.random.get_state()
 #randomly permuate the features and outputs using the same shuffle for each epoch
@@ -174,6 +224,7 @@ np.random.set_state(rng_state)
 np.random.shuffle(Y_dat)   
 sz=X_dat.shape
 
+#generate train, validation, and holdout set
 frac_valid=0.05
 frac_holdout=0.05
 frac=1.0-frac_valid-frac_holdout
@@ -189,17 +240,26 @@ valid_Y=Y_dat[n_train:n_valid]
 holdout_X=X_dat[n_valid:,:]
 holdout_Y=Y_dat[n_valid:]
 
-y_pow_vec=[1.0,2.0,3.0,16.0]
+y_pow_vec=[2.0,3.0,8.0]
 n_pow=len(y_pow_vec)
 X_folds=np.zeros((n_pow,3))
-num_round=200
-X_net_valid=np.zeros((valid_X.shape[0],n_pow))
-X_net_holdout=np.zeros((holdout_X.shape[0],n_pow))
+num_round=7000
+log_ind=0.0
+X_net_valid=np.zeros((valid_X.shape[0],n_pow+1))
+X_net_holdout=np.zeros((holdout_X.shape[0],n_pow+1))
+X_net_test=np.zeros((test_X.shape[0],n_pow+1))
 for i in range(n_pow):
     y_pow=y_pow_vec[i]
-    temp=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,param,num_round)
+    temp=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,test_X,param,num_round,log_ind)
     X_net_valid[:,i]=temp[0]
     X_net_holdout[:,i]=temp[1]
+    X_net_test[:,i]=temp[2]
+
+log_ind=1.0
+temp=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,test_X,param,num_round,log_ind)
+X_net_valid[:,n_pow]=temp[0]
+X_net_holdout[:,n_pow]=temp[1]
+X_net_test[:,n_pow]=temp[2]
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -220,3 +280,37 @@ enet_mod=enet.fit(X_net_valid,valid_Y)
 pred_holdout=enet_mod.predict(X_net_holdout)
 
 holdout_gini=Gini(holdout_Y,pred_holdout)
+
+valid_rmse=np.sqrt(sum( (pred_holdout[m] - holdout_Y[m])**2 for m in range(len(holdout_Y))) / float(len(holdout_Y)))
+print valid_rmse, holdout_gini                     
+
+pred_test=enet_mod.predict(X_net_test)
+
+df=pd.DataFrame(pred_test)
+df.columns=['Hazard']
+indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+df.insert(loc=0,column='Id',value=indices)
+df.to_csv("XGB_predictions.csv",sep=",",index=False)
+####################################################################################
+####################################################################################
+####################################################################################
+#Linear regression blender
+####################################################################################
+####################################################################################
+####################################################################################
+#model
+from sklearn.linear_model import LinearRegression
+LRmodel=LinearRegression(
+    fit_intercept=False, 
+    normalize=False, 
+    copy_X=True
+    )
+
+#train
+LRmodel = LRmodel.fit(X_net_valid,valid_Y)
+#predict 
+pred_holdout=LRmodel.predict(X_net_holdout)
+holdout_gini=Gini(holdout_Y,pred_holdout)
+
+valid_rmse=np.sqrt(sum( (pred_holdout[m] - holdout_Y[m])**2 for m in range(len(holdout_Y))) / float(len(holdout_Y)))
+print valid_rmse, holdout_gini      
