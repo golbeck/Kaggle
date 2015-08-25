@@ -12,6 +12,9 @@ import theano
 import theano.tensor as T
 
 import xgboost as xgb
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -21,7 +24,7 @@ def rmse_log(Y_true,Y_pred):
 ####################################################################################
 ####################################################################################
 ####################################################################################
-def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,param,num_round,log_ind):
+def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,test_X,param,num_round,log_ind):
     #transform training labels
     if log_ind==1.0:
         train_Y = np.log1p(Y_dat)
@@ -32,6 +35,7 @@ def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,param,num_round,log_ind)
     xg_train = xgb.DMatrix( train_X, label=train_Y)
     xg_valid = xgb.DMatrix(valid_X)
     xg_holdout = xgb.DMatrix(holdout_X)
+    xg_test = xgb.DMatrix(test_X)
 
     #train model
     watchlist = [ (xg_train,'train') ]
@@ -39,25 +43,33 @@ def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,param,num_round,log_ind)
     n_tree = bst.best_iteration
 
     #predict on validation set, which will be used for fitting the blended model
-    pred_valid = bst.predict( xg_valid, ntree_limit=n_tree )
+    pred_XGB_valid = bst.predict( xg_valid, ntree_limit=n_tree )
 
     #transform predictions
     if log_ind==1.0:
-        pred_valid = np.expm1(pred_valid)
+        pred_XGB_valid = np.expm1(pred_XGB_valid)
     else:
-        pred_valid = np.power(pred_valid,y_pow)
+        pred_XGB_valid = np.power(pred_XGB_valid,y_pow)
 
     #predict on holdout set
-    pred_holdout = bst.predict( xg_holdout, ntree_limit=n_tree )
+    pred_XGB_holdout = bst.predict( xg_holdout, ntree_limit=n_tree )
 
     #transform predictions
     if log_ind==1.0:
-        pred_holdout = np.expm1(pred_holdout)
+        pred_XGB_holdout = np.expm1(pred_XGB_holdout)
     else:
-        pred_holdout = np.power(pred_holdout,y_pow)
+        pred_XGB_holdout = np.power(pred_XGB_holdout,y_pow)
+
+    pred_XGB_test = bst.predict( xg_test, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_XGB_test = np.expm1(pred_XGB_test)
+    else:
+        pred_XGB_test = np.power(pred_XGB_test,y_pow)
 
     #return predictions
-    return [pred_valid,pred_holdout]
+    return [pred_XGB_valid,pred_XGB_holdout,pred_XGB_test]
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -131,42 +143,91 @@ param["silent"] = 1
 param["max_depth"] = 30
 param['nthread'] = 4
 param['num_class'] = 1
-num_round=1000
+num_round=7000
 ####################################################################################
 ####################################################################################
 
 models=[[16.0,0.0],[16.0,1.0]]
-n_models=len(models)
+n_models=len(models)+2
 ####################################################################################
 ####################################################################################
 ####################################################################################
 n_folds=5
 fold_indices=split_by_id(n_folds,dfx,assembly_ids)
+fold_lengths=np.array([len(x[1]) for x in fold_indices])
 dfx.drop("tube_assembly_id",axis=1,inplace=True)
 X_dat=np.array(dfx)
 Y_dat=np.array(dfy)
 
 X_net_valid=[]
 X_net_holdout=[]
+X_net_test=[]
 rmse_vec=[]
+
 #rotate the holdout set
-for i in range(n_folds):
+# for i in range(n_folds):
+for i in range(1):
     holdout_X=X_dat[fold_indices[i][1],:]
     holdout_Y=Y_dat[fold_indices[i][1]]
+    n_valid_feat=fold_lengths.sum()-len(fold_indices[i][1])
+    X_valid_feat=np.zeros((n_valid_feat,n_models))
+    ind_init=0
     #create a train and validation set from the remaining folds
     for j in list(set(range(n_folds))-set([i])):
         valid_X=X_dat[fold_indices[j][1],:]
         valid_Y=Y_dat[fold_indices[j][1]]
 
+        #given the validation set, train on the remaining indices
         train_indices=[]
         for k in list(set(range(n_folds))-set([i,j])):
             train_indices+=fold_indices[k][1]
         train_X=X_dat[train_indices,:]
         train_Y=Y_dat[train_indices,:]
 
+        #train each model
+        X_feat=np.zeros((fold_lengths[j],n_models))
+        ind=0
         for y_pow,log_ind in models:
             #predict on given validation set
-            pred_valid,pred_holdout=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,param,num_round,log_ind)
-            X_net_valid.append(pred_valid)
-            X_net_holdout.append(pred_holdout)
-            rmse_vec.append([y_pow,log_ind,rmse_log(holdout_Y,pred_holdout)])
+            pred_XGB_valid,pred_XGB_holdout,pred_XGB_test=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,test_X,param,num_round,log_ind)
+            X_net_valid.append(pred_XGB_valid)
+            X_feat[:,ind]=pred_XGB_valid
+            X_net_holdout.append(pred_XGB_holdout)
+            X_net_test.append(pred_XGB_test)
+            rmse_vec.append([y_pow,log_ind,rmse_log(valid_Y,pred_XGB_valid),rmse_log(holdout_Y,pred_XGB_holdout)])
+            ind+=1
+        ####################################################################
+        #classifier
+        RF = RandomForestRegressor(
+                n_estimators=1000,        #number of trees to generate
+                n_jobs=4,               #run in parallel on all cores
+                criterion="mse"
+                ) 
+
+        RFmodel = RF.fit(train_X, train_Y.ravel())
+        pred_RF_valid=RFmodel.predict(valid_X)
+        X_feat[:,ind]=pred_RF_valid
+        pred_RF_holdout=RFmodel.predict(holdout_X)
+        pred_RF_test=RFmodel.predict(test_X)
+        ind+=1
+        rmse_vec.append(['RF','RF',rmse_log(valid_Y,pred_RF_valid),rmse_log(holdout_Y,pred_RF_holdout)])
+            
+
+        ####################################################################
+        svr_rbf = SVR(kernel='rbf', C=1.0, gamma=0.1)
+        # svr_lin = SVR(kernel='linear', C=1e3)
+        # svr_poly = SVR(kernel='poly', C=1e3, degree=2)
+        svr_mod = svr_rbf.fit(train_X, train_Y.ravel())
+        pred_SVR_valid=svr_mod.predict(valid_X)
+        X_feat[:,ind]=pred_SVR_valid
+        pred_SVR_holdout=svr_mod.predict(holdout_X)
+        pred_SVR_test=svr_mod.predict(test_X)
+        # y_lin = svr_lin.fit(X, y).predict(X)
+        # y_poly = svr_poly.fit(X, y).predict(X)
+
+        rmse_vec.append(['SVR','SVR',rmse_log(valid_Y,pred_SVR_valid),rmse_log(holdout_Y,pred_SVR_holdout)])
+            
+        ####################################################################
+        ind_fin=ind_init+fold_lengths[j]
+        X_valid_feat[ind_init:ind_fin,:]=X_feat
+        ind_init=ind_fin
