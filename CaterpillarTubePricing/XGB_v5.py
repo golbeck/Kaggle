@@ -26,8 +26,8 @@ import theano.tensor as T
 import xgboost as xgb
 
 from sklearn.linear_model import ElasticNet
-
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import RidgeCV
 ####################################################################################
 ####################################################################################
 ####################################################################################

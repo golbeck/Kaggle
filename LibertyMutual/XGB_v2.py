@@ -122,6 +122,46 @@ def xgb_train_full(y_pow,train_X,Y_dat,test_X,param,num_round):
 ####################################################################################
 ####################################################################################
 ####################################################################################
+def xgb_train_mod(y_pow,train_X,Y_dat,valid_X,holdout_X,param,num_round,log_ind):
+    #transform training labels
+    if log_ind==1.0:
+        train_Y = np.log1p(Y_dat)
+    else:
+        train_Y = np.power(Y_dat,1.0/y_pow)
+
+    #setup train, validation and holdout inputs to XGB
+    xg_train = xgb.DMatrix( train_X, label=train_Y)
+    xg_valid = xgb.DMatrix(valid_X)
+    xg_holdout = xgb.DMatrix(holdout_X)
+
+    #train model
+    watchlist = [ (xg_train,'train') ]
+    bst = xgb.train(param, xg_train, num_round, watchlist, early_stopping_rounds=50 );
+    n_tree = bst.best_iteration
+
+    #predict on validation set, which will be used for fitting the blended model
+    pred_valid = bst.predict( xg_valid, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_valid = np.expm1(pred_valid)
+    else:
+        pred_valid = np.power(pred_valid,y_pow)
+
+    #predict on holdout set
+    pred_holdout = bst.predict( xg_holdout, ntree_limit=n_tree )
+
+    #transform predictions
+    if log_ind==1.0:
+        pred_holdout = np.expm1(pred_holdout)
+    else:
+        pred_holdout = np.power(pred_holdout,y_pow)
+
+    #return predictions
+    return [pred_valid,pred_holdout]
+####################################################################################
+####################################################################################
+####################################################################################
 # pwd_temp=os.getcwd()
 # dir1='/home/sgolbeck/workspace/Kaggle/LibertyMutual'
 # # dir1='/home/golbeck/Workspace/Kaggle/LibertyMutual'
@@ -140,21 +180,14 @@ for col in dat.columns[2:]:
         df[col]=dat[col]
 
 
-df.drop('T2_V10', axis=1, inplace=True)
-df.drop('T1_V13', axis=1, inplace=True)
-df.drop('T2_V5', axis=1, inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
 # df.drop('T2_V10', axis=1, inplace=True)
 # df.drop('T2_V7', axis=1, inplace=True)
 # df.drop('T1_V13', axis=1, inplace=True)
 # df.drop('T1_V10', axis=1, inplace=True)
 
-# df.drop('T2_V8',axis=1,inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V11',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
-# df.drop('T2_V3',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
+# df.drop('T2_V10', axis=1, inplace=True)
+# df.drop('T1_V13', axis=1, inplace=True)
+# df.drop('T2_V5', axis=1, inplace=True)
 
 
 X_dat=np.array(df)
@@ -173,23 +206,14 @@ for col in dat.columns[1:]:
         df[col]=dat[col]
 
 
-df.drop('T2_V10', axis=1, inplace=True)
-df.drop('T1_V13', axis=1, inplace=True)
-df.drop('T2_V5', axis=1, inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
 # df.drop('T2_V10', axis=1, inplace=True)
 # df.drop('T2_V7', axis=1, inplace=True)
 # df.drop('T1_V13', axis=1, inplace=True)
 # df.drop('T1_V10', axis=1, inplace=True)
 
-# df.drop('T1_V17',axis=1,inplace=True)
-
-# df.drop('T2_V8',axis=1,inplace=True)
-# df.drop('T2_V12',axis=1,inplace=True)
-# df.drop('T2_V11',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
-# df.drop('T2_V3',axis=1,inplace=True)
-# df.drop('T1_V17',axis=1,inplace=True)
+# df.drop('T2_V10', axis=1, inplace=True)
+# df.drop('T1_V13', axis=1, inplace=True)
+# df.drop('T2_V5', axis=1, inplace=True)
 
 col_names=df.columns
 
@@ -217,6 +241,66 @@ param["max_depth"] = 10
 param['nthread'] = 4 
 param['num_class'] = 1 
 num_round = 7000
+
+
+
+####################################################################################
+####################################################################################
+####################################################################################
+# bag estimates from non-overlapping folds
+####################################################################################
+####################################################################################
+####################################################################################
+#shuffle train set
+seed=1234
+np.random.seed(seed=seed)
+rng_state = np.random.get_state()
+#randomly permuate the features and outputs using the same shuffle for each epoch
+np.random.shuffle(X_dat)
+np.random.set_state(rng_state)
+np.random.shuffle(Y_dat)   
+sz = X_dat.shape
+
+y_pow=2.0
+folds=20
+p=range(folds)
+frac_=1.0/np.float(folds)
+r0=range(sz[0])
+X_folds=np.zeros(folds)
+X_folds=np.zeros((folds,2))
+n_test=test_X.shape[0]
+y_test_mat=np.zeros((n_test,folds))
+for i in p:
+      r_valid=set(r0[int(i*frac_*sz[0]):int((i+1)*frac_*sz[0])])
+      r_train=set(r0)-r_valid
+      r_valid_indices=[x for x in r_valid]
+      r_train_indices=[y for y in r_train]
+      train_X = X_dat[r_train_indices, :]
+      train_Y = np.power(Y_dat[r_train_indices],1.0/y_pow)
+      valid_X = X_dat[r_valid_indices, :]
+      valid_Y = np.power(Y_dat[r_valid_indices],1.0/y_pow)
+      xg_train = xgb.DMatrix( train_X, label=train_Y)
+      xg_valid = xgb.DMatrix(valid_X, label=valid_Y)
+      xg_test = xgb.DMatrix(test_X)
+      watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
+      bst = xgb.train(param, xg_train, num_round, watchlist , early_stopping_rounds=50 );
+      n_tree = bst.best_iteration
+      pred = np.power(bst.predict( xg_valid, ntree_limit=n_tree ),y_pow);
+      valid_Y = np.power(valid_Y,y_pow)
+      valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
+      X_folds[i,0]=valid_rmse
+      X_folds[i,1]=Gini(valid_Y, pred)
+      y_test = bst.predict( xg_test, ntree_limit=n_tree );
+      y_test_mat[:,i]=np.power(y_test,y_pow)
+#bag estimates from the model trained on different folds (no need to average since ranking only matter)
+y_bag=y_test_mat.sum(axis=1)
+
+df=pd.DataFrame(y_bag)
+df.columns=['Hazard']
+indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
+df.insert(loc=0,column='Id',value=indices)
+# np.savetxt("MLP_predictions_Theano.csv.gz", df, delimiter=",")
+df.to_csv("XGB_predictions.csv",sep=",",index=False)
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -250,6 +334,8 @@ np.random.shuffle(X_dat)
 np.random.set_state(rng_state)
 np.random.shuffle(Y_dat)   
 sz = X_dat.shape
+
+
 
 frac=0.98
 train_X = X_dat[:int(sz[0] * frac), :]
@@ -398,67 +484,6 @@ df.columns=['Hazard']
 indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
 df.insert(loc=0,column='Id',value=indices)
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
-
-
-####################################################################################
-####################################################################################
-####################################################################################
-# cross validation
-####################################################################################
-####################################################################################
-####################################################################################
-depth_grid=[1,3,5,10,20,40]
-n_depth=len(depth_grid)
-eta_grid=[0.1]
-n_eta=len(eta_grid)
-lambda_grid=[0.01]
-n_lambda=len(lambda_grid)
-child_grid=[1,2,3,5,7,10]
-n_child=len(child_grid)
-subsample_grid=[0.50,0.70,0.90]
-n_subsample=len(subsample_grid)
-
-X_cv=np.zeros((n_depth*n_lambda*n_child*n_subsample,6))
-ind=0
-for i in range(n_depth):
-      for j in range(n_lambda):
-            for k in range(n_child):
-                  for l in range(n_subsample):
-                        param = {}
-                        param['max_depth']=depth_grid[i]
-                        param['eta']=0.1
-                        param['lambda']=lambda_grid[j]
-                        param['alpha']=0.1
-                        param["subsample"] = subsample_grid[l]
-                        param['objective']='reg:linear'
-                        param['eval_metric']='rmse'
-                        param["min_child_weight"] = child_grid[k]
-                        # param["scale_pos_weight"] = 1.0
-                        param['silent'] = 1
-                        param['nthread'] = 4
-                        n_class=1
-                        param['num_class'] = n_class
-                        num_round = num_round_grid[i]
-
-                        watchlist = [ (xg_train,'train'), (xg_valid, 'test') ]
-                        num_round = 100
-                        bst = xgb.train(param, xg_train, num_round, watchlist,early_stopping_rounds=50);
-                        n_tree = bst.best_iteration
-                        pred = bst.predict( xg_valid, ntree_limit=n_tree );
-
-                        X_cv[ind,0]=depth_grid[i]
-                        X_cv[ind,1]=lambda_grid[j]
-                        X_cv[ind,2]=child_grid[k]
-                        X_cv[ind,3]=subsample_grid[l]
-                        valid_rmse=np.sqrt(sum( (pred[m] - valid_Y[m])**2 for m in range(len(valid_Y))) / float(len(valid_Y)))
-                        valid_gini=Gini(valid_Y, pred)
-                        X_cv[ind,4]=valid_rmse
-                        X_cv[ind,5]=valid_gini
-                        ind+=1
-                        print ind, valid_rmse, valid_gini
-
-df_cv=pd.DataFrame(X_cv)
-df_cv.to_csv('xgboost_cv_v2.csv')
 
 ####################################################################################
 ####################################################################################
@@ -632,7 +657,10 @@ df_cv.to_csv('xgboost_cv_v2.csv')
 ####################################################################################
 ####################################################################################
 ####################################################################################
-
+#blender model
+####################################################################################
+####################################################################################
+####################################################################################
 param["objective"] = "reg:linear" 
 param["eta"] = 0.01
 param["min_child_weight"] = 25 
@@ -701,3 +729,107 @@ df.columns=['Hazard']
 indices=np.loadtxt("X_test_indices.gz",delimiter=",").astype('int32')
 df.insert(loc=0,column='Id',value=indices)
 df.to_csv("XGB_predictions.csv",sep=",",index=False)
+
+
+
+
+####################################################################################
+####################################################################################
+####################################################################################
+#blender model
+####################################################################################
+####################################################################################
+####################################################################################
+
+seed=1234
+np.random.seed(seed=seed)
+rng_state = np.random.get_state()
+#randomly permuate the features and outputs using the same shuffle for each epoch
+np.random.shuffle(X_dat)
+np.random.set_state(rng_state)
+np.random.shuffle(Y_dat)   
+sz = X_dat.shape
+
+param={}
+param["objective"] = "reg:linear" 
+param["eta"] = 0.01
+param["min_child_weight"] = 25 
+param["subsample"] = 0.8 
+param["colsample_bytree"] = 0.85 
+param["scale_pos_weight"] = 1.0 
+param["silent"] = 1 
+param["max_depth"] = 10 
+param['nthread'] = 4 
+param['num_class'] = 1 
+num_round = 2000
+
+y_pow=[2.0,3.0,8.0]
+sz = X_dat.shape
+frac=0.95
+frac_=0.975
+train_X = X_dat[:int(sz[0] * frac), :]
+train_Y = Y_dat[:int(sz[0] * frac)]
+valid_X = X_dat[int(sz[0] * frac):int(sz[0] * frac_), :]
+valid_Y = Y_dat[int(sz[0] * frac):int(sz[0] * frac_)]
+holdout_X = X_dat[int(sz[0] * frac_):, :]
+holdout_Y = Y_dat[int(sz[0] * frac_):]
+
+log_ind=0.0
+pred_valid_0,pred_holdout_0=xgb_train_mod(y_pow[0],train_X,train_Y,valid_X,holdout_X,param,num_round,log_ind)
+gini_0=[Gini(valid_Y, pred_valid_0),Gini(holdout_Y, pred_holdout_0)]
+pred_valid_1,pred_holdout_1=xgb_train_mod(y_pow[1],train_X,train_Y,valid_X,holdout_X,param,num_round,log_ind)
+gini_1=[Gini(valid_Y, pred_valid_1),Gini(holdout_Y, pred_holdout_1)]
+pred_valid_2,pred_holdout_2=xgb_train_mod(y_pow[2],train_X,train_Y,valid_X,holdout_X,param,num_round,log_ind)
+gini_2=[Gini(valid_Y, pred_valid_2),Gini(holdout_Y, pred_holdout_2)]
+
+Y_mat_valid=np.column_stack((pred_valid_0,pred_valid_1,pred_valid_2))
+Y_mat_holdout=np.column_stack((pred_holdout_0,pred_holdout_1,pred_valid_2))
+
+
+from sklearn.linear_model import ElasticNet
+
+from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import RidgeCV
+
+enet=ElasticNet(alpha=1.0, l1_ratio=0.5, fit_intercept=False, normalize=False, 
+    precompute=False, max_iter=1000, copy_X=True, tol=0.0001, warm_start=False, 
+    positive=False)
+LRmodel=LinearRegression(
+    fit_intercept=False, 
+    normalize=False, 
+    copy_X=True)
+
+Ridge = RidgeCV(alphas=alphas, normalize=True, cv=5)
+
+####################################################################################
+#fit blender using validation set
+enet_mod=enet.fit(Y_mat_valid,valid_Y)
+pred_valid=enet_mod.predict(Y_mat_valid)
+gini_blend_valid=Gini(valid_Y, pred_valid)
+
+#save model along with holdout set performance measure
+pred_holdout=enet_mod.predict(Y_mat_holdout)
+gini_blend_holdout=Gini(holdout_Y, pred_holdout)
+
+
+####################################################################################
+#fit blender using validation set
+LR_mod=LRmodel.fit(Y_mat_valid,valid_Y)
+pred_valid=LR_mod.predict(Y_mat_valid)
+gini_blend_valid=Gini(valid_Y, pred_valid)
+
+#save model along with holdout set performance measure
+pred_holdout=LR_mod.predict(Y_mat_holdout)
+gini_blend_holdout=Gini(holdout_Y, pred_holdout)
+
+
+####################################################################################
+alphas = [0.0001, 0.005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 500.0, 1000.0]
+
+ridge_fit=Ridge.fit(Y_mat_valid, valid_Y)    
+pred_valid=ridge_fit.predict(Y_mat_valid)
+gini_blend_valid=Gini(valid_Y, pred_valid)
+
+#save model along with holdout set performance measure
+pred_holdout=ridge_fit.predict(Y_mat_holdout)
+gini_blend_holdout=Gini(holdout_Y, pred_holdout)
