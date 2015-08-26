@@ -169,6 +169,7 @@ rmse_vec=[]
 #lists for saving validation, holdout and test predictions
 blender_rmse_enet=[]
 y_test_enet=np.zeros((test_X.shape[0],n_folds))
+y_test_avg=np.zeros((test_X.shape[0],n_folds))
 #rotate the holdout set
 for i in range(n_folds):
 # for i in range(1):
@@ -286,6 +287,8 @@ for i in range(n_folds):
     #generate OOS performance measure on holdout set
     blender_rmse_enet.append([enet_mod,rmse_log(holdout_Y,pred_holdout)])
     #test set predictions
+    X_test/=np.float(n_folds-1)
     y_test_enet[:,i]=enet_mod.predict(X_test)
+    y_test_avg[:,i]=X_test.mean(1)
 
     print "iteration %g out of %i" %(i+1,n_folds)
