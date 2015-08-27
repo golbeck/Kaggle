@@ -75,7 +75,7 @@ ind_valid=1
 
 if ind_valid==1:
     #generate validation set
-    frac=0.05
+    frac=0.10
     n_valid=int(frac*sz[0])
     assembly_ids=dfx['tube_assembly_id'].unique()
     temp=pd.DataFrame()
@@ -89,7 +89,7 @@ if ind_valid==1:
         n_temp=len(valid_indices)
 
     #generate holdout set
-    frac=0.05
+    frac=0.025
     n_holdout=int(frac*sz[0])
     n_temp=0
     holdout_indices=[]
@@ -168,7 +168,7 @@ if ind_valid==1:
     #holdout
     xg_holdout = xgb.DMatrix(holdout_X)
     pred_log_holdout = bst.predict( xg_holdout,ntree_limit=n_tree );
-    pred_log_holdout= np.power(pred_log_holdout,y_pow)
+    pred_log_holdout= np.expm1(pred_log_holdout)
     summary_holdout.append([y_pow,rmse_log(holdout_Y,pred_log_holdout)])
 
 
