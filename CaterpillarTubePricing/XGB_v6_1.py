@@ -150,8 +150,8 @@ param['nthread'] = 4
 param['num_class'] = 1
 
 num_round=2000
-num_tree_RF=1000
-num_tree_ET=1000
+num_tree_RF=500
+num_tree_ET=500
 ####################################################################################
 ####################################################################################
 
@@ -160,157 +160,168 @@ n_models=len(models)+2
 ####################################################################################
 ####################################################################################
 ####################################################################################
-n_folds=3
+#first generate a holdout set of fraction 1/n_folds
+n_folds=10
 fold_indices=split_by_id(n_folds,dfx,assembly_ids)
+#holdout set indices
+holdout_indices=fold_indices[0][1]
+#indices for training and validation
+indices_new=fold_indices[0][0]
+#update available unique assembly ids
+assembly_ids=dfx.ix[indices_new,'tube_assembly_id'].unique()
+
+#generate training and validation sets
+n_folds=4
+fold_indices=split_by_id(n_folds,dfx.ix[indices_new,:],assembly_ids)
 fold_lengths=np.array([len(x[1]) for x in fold_indices])
 dfx.drop("tube_assembly_id",axis=1,inplace=True)
 X_dat=np.array(dfx)
 Y_dat=np.array(dfy)
 
+
+#select holdout set
+holdout_X=X_dat[holdout_indices,:]
+holdout_Y=Y_dat[holdout_indices]
+
 rmse_vec=[]
 #lists for saving validation, holdout and test predictions
 blender_rmse_enet=[]
-y_test_enet=np.zeros((test_X.shape[0],n_folds))
-y_test_avg=np.zeros((test_X.shape[0],n_folds))
-#rotate the holdout set
+# y_test_enet=np.zeros((test_X.shape[0],n_folds))
+# y_test_avg=np.zeros((test_X.shape[0],n_folds))
+
+
+#total size of all validation sets to be used
+n_valid_feat=len(indices_new)
+#matrix for saving predictions on validation sets
+X_valid=np.zeros((n_valid_feat,n_models))
+Y_valid=np.zeros(n_valid_feat)
+
+
+#matrix for saving predictions on holdout set
+X_holdout=np.zeros((holdout_X.shape[0],n_models))
+
+#matrix for saving predictions on test set
+X_test=np.zeros((test_X.shape[0],n_models))
+
+#index for saving validation set predictions on each fold
+ind_init_valid=0
+
 for i in range(n_folds):
 # for i in range(1):
-    #select holdout set
-    holdout_X=X_dat[fold_indices[i][1],:]
-    holdout_Y=Y_dat[fold_indices[i][1]]
-    #total size of all validation sets to be used
-    n_valid_feat=fold_lengths.sum()-len(fold_indices[i][1])
-    #matrix for saving predictions on validation sets
-    X_valid=np.zeros((n_valid_feat,n_models))
-    Y_valid=np.zeros(n_valid_feat)
-    #index for saving validation set predictions on each fold
-    ind_init_valid=0
     #create a train and validation set from the remaining folds
 
-    #matrix for saving predictions on holdout set
-    X_holdout=np.zeros((holdout_X.shape[0],n_models))
+    X_holdout_fold=np.zeros((holdout_X.shape[0],n_models))
 
     #matrix for saving predictions on test set
-    X_test=np.zeros((test_X.shape[0],n_models))
-    for j in list(set(range(n_folds))-set([i])):
+    X_test_fold=np.zeros((test_X.shape[0],n_models))
 
-        #for given fold, generate validation set
-        valid_X=X_dat[fold_indices[j][1],:]
-        valid_Y=Y_dat[fold_indices[j][1]]
+    #for given fold, generate validation set
+    valid_X=X_dat[fold_indices[i][1],:]
+    valid_Y=Y_dat[fold_indices[i][1]]
 
-        #given the validation set, train on the remaining indices
-        train_indices=[]
-        for k in list(set(range(n_folds))-set([i,j])):
-            train_indices+=fold_indices[k][1]
-        train_X=X_dat[train_indices,:]
-        train_Y=Y_dat[train_indices,:]
+    #given the validation set, train on the remaining indices
+    train_indices=fold_indices[i][0]
+    train_X=X_dat[train_indices,:]
+    train_Y=Y_dat[train_indices,:]
 
-        #train each model
-        X_feat_valid=np.zeros((fold_lengths[j],n_models))
-        ind=0
-        #iterate over models
-        for y_pow,log_ind in models:
-            #predict on given validation set using boosted trees
-            pred_XGB_valid,pred_XGB_holdout,pred_XGB_test=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,test_X,param,num_round,log_ind)
-            #save validation set predictions
-            X_feat_valid[:,ind]=pred_XGB_valid
-            #save holdout and test predictions
-            X_holdout[:,ind]+=pred_XGB_holdout
-            X_test[:,ind]+=pred_XGB_test
-            rmse_vec.append([y_pow,log_ind,rmse_log(valid_Y,pred_XGB_valid),rmse_log(holdout_Y,pred_XGB_holdout)])
-            ind+=1
-        ####################################################################
-        #RF classifier
-        RF = RandomForestRegressor(
-                n_estimators=num_tree_RF,        #number of trees to generate
-                n_jobs=4,               #run in parallel on all cores
-                criterion="mse"
-                ) 
-
-        print "Training RF model"
-        RFmodel = RF.fit(train_X, train_Y.ravel())
-        pred_RF_valid=RFmodel.predict(valid_X)
+    #train each model
+    X_feat_valid=np.zeros((valid_X.shape[0],n_models))
+    ind=0
+    #iterate over models
+    for y_pow,log_ind in models:
+        #predict on given validation set using boosted trees
+        pred_XGB_valid,pred_XGB_holdout,pred_XGB_test=xgb_train_mod(y_pow,train_X,train_Y,valid_X,holdout_X,test_X,param,num_round,log_ind)
         #save validation set predictions
-        X_feat_valid[:,ind]=pred_RF_valid
-        pred_RF_holdout=RFmodel.predict(holdout_X)
-        pred_RF_test=RFmodel.predict(test_X)
+        X_feat_valid[:,ind]=pred_XGB_valid
         #save holdout and test predictions
-        X_holdout[:,ind]+=pred_RF_holdout
-        X_test[:,ind]+=pred_RF_test
+        X_holdout_fold[:,ind]=pred_XGB_holdout
+        X_test_fold[:,ind]=pred_XGB_test
+        rmse_vec.append([y_pow,log_ind,rmse_log(valid_Y,pred_XGB_valid),rmse_log(holdout_Y,pred_XGB_holdout)])
         ind+=1
-        rmse_vec.append(['RF','RF',rmse_log(valid_Y,pred_RF_valid),rmse_log(holdout_Y,pred_RF_holdout)])
-            
-        print "Training Extremely Randomized Trees model"
-        seed=1234
-        ET=ExtraTreesRegressor(n_estimators=num_tree_ET, criterion='mse', max_depth=30, min_samples_split=10, 
-            max_features=0.80, n_jobs=4, random_state=seed, verbose=0)
+    ####################################################################
+    #RF classifier
+    RF = RandomForestRegressor(
+            n_estimators=num_tree_RF,        #number of trees to generate
+            n_jobs=3,               #run in parallel on all cores
+            criterion="mse"
+            ) 
 
-        ETmodel=ET.fit(train_X,train_Y.ravel())
-        pred_ET_valid=ETmodel.predict(valid_X)
-        #save validation set predictions
-        X_feat_valid[:,ind]=pred_ET_valid
-        pred_ET_holdout=ETmodel.predict(holdout_X)
-        pred_ET_test=ETmodel.predict(test_X)
-        #save holdout and test predictions
-        X_holdout[:,ind]+=pred_ET_holdout
-        X_test[:,ind]+=pred_ET_test
-        ind+=1
-        rmse_vec.append(['ET','ET',rmse_log(valid_Y,pred_ET_valid),rmse_log(holdout_Y,pred_ET_holdout)])
-        # ####################################################################
-        # svr_rbf = SVR(kernel='rbf', C=1.0, gamma=0.1)
-        # # svr_lin = SVR(kernel='linear', C=1e3)
-        # # svr_poly = SVR(kernel='poly', C=1e3, degree=2)
-        # print "Training support vector regressor"
-        # svr_mod = svr_rbf.fit(train_X, train_Y.ravel())
-        # pred_SVR_valid=svr_mod.predict(valid_X)
-        # #save validation set predictions
-        # X_feat_valid[:,ind]=pred_SVR_valid
-        # pred_SVR_holdout=svr_mod.predict(holdout_X)
-        # pred_SVR_test=svr_mod.predict(test_X)
-        # #save holdout and test predictions
-        # X_holdout[:,ind]=pred_SVR_holdout
-        # X_test[:,ind]=pred_SVR_test
-        # # y_lin = svr_lin.fit(X, y).predict(X)
-        # # y_poly = svr_poly.fit(X, y).predict(X)
+    print "Training RF model"
+    RFmodel = RF.fit(train_X, train_Y.ravel())
+    pred_RF_valid=RFmodel.predict(valid_X)
+    #save validation set predictions
+    X_feat_valid[:,ind]=pred_RF_valid
+    pred_RF_holdout=RFmodel.predict(holdout_X)
+    pred_RF_test=RFmodel.predict(test_X)
+    #save holdout and test predictions
+    X_holdout_fold[:,ind]=pred_RF_holdout
+    X_test_fold[:,ind]=pred_RF_test
+    ind+=1
+    rmse_vec.append(['RF','RF',rmse_log(valid_Y,pred_RF_valid),rmse_log(holdout_Y,pred_RF_holdout)])
+        
+    print "Training Extremely Randomized Trees model"
+    seed=1234
+    ET=ExtraTreesRegressor(n_estimators=num_tree_ET, criterion='mse', max_depth=30, min_samples_split=10, 
+        max_features=0.80, n_jobs=3, random_state=seed, verbose=0)
 
-        # rmse_vec.append(['SVR','SVR',rmse_log(valid_Y,pred_SVR_valid),rmse_log(holdout_Y,pred_SVR_holdout)])
-            
-        ####################################################################
-        #save validation results
-        ind_fin_valid=ind_init_valid+fold_lengths[j]
-        X_valid[ind_init_valid:ind_fin_valid,:]=X_feat_valid
-        Y_valid[ind_init_valid:ind_fin_valid]=valid_Y.ravel()
-        ind_init_valid=ind_fin_valid
-        ####################################################################
+    ETmodel=ET.fit(train_X,train_Y.ravel())
+    pred_ET_valid=ETmodel.predict(valid_X)
+    #save validation set predictions
+    X_feat_valid[:,ind]=pred_ET_valid
+    pred_ET_holdout=ETmodel.predict(holdout_X)
+    pred_ET_test=ETmodel.predict(test_X)
+    #save holdout and test predictions
+    X_holdout_fold[:,ind]=pred_ET_holdout
+    X_test_fold[:,ind]=pred_ET_test
+    ind+=1
+    rmse_vec.append(['ET','ET',rmse_log(valid_Y,pred_ET_valid),rmse_log(holdout_Y,pred_ET_holdout)])
+        
+    X_holdout+=X_holdout_fold
+    X_test+=X_test_fold
 
 
-    enet=ElasticNet(alpha=1.0, l1_ratio=0.5, fit_intercept=False, normalize=False, 
-        precompute=False, max_iter=1000, copy_X=True, tol=0.0001, warm_start=False, 
-        positive=False)
-    # LRmodel=LinearRegression(
-    #     fit_intercept=False, 
-    #     normalize=False, 
-    #     copy_X=True)
+    holdout_fold_X=X_holdout_fold.mean(1)
+    valid_fold_X=X_feat_valid.mean(1)
+    rmse_vec.append(['avg','avg',rmse_log(valid_Y,valid_fold_X),rmse_log(holdout_Y,holdout_fold_X)])
+    ####################################################################
+    #save validation results
+    ind_fin_valid=ind_init_valid+valid_X.shape[0]
+    X_valid[ind_init_valid:ind_fin_valid,:]=X_feat_valid
+    Y_valid[ind_init_valid:ind_fin_valid]=valid_Y.ravel()
+    ind_init_valid=ind_fin_valid
+    ####################################################################
 
-    # Ridge = RidgeCV(alphas=alphas, normalize=True, cv=5)
-
-    ####################################################################################
-    #fit blender using validation set
-    enet_mod=enet.fit(X_valid,Y_valid)
-    #save model along with holdout set performance measure
-    #average over holdout set predictions
-    X_holdout/=np.float(n_folds-1)
-    pred_holdout=enet_mod.predict(X_holdout)
-    #generate OOS performance measure on holdout set
-    blender_rmse_enet.append([enet_mod,rmse_log(holdout_Y,pred_holdout)])
-    #test set predictions
-    X_test/=np.float(n_folds-1)
-    #use elastic net model for ensembling
-    y_test_enet[:,i]=enet_mod.predict(X_test)
-    #take the mean of models for ensembling
-    y_test_avg[:,i]=X_test.mean(1)
 
     print "iteration %g out of %i" %(i+1,n_folds)
+
+
+
+enet=ElasticNet(alpha=1.0, l1_ratio=0.5, fit_intercept=False, normalize=False, 
+    precompute=False, max_iter=1000, copy_X=True, tol=0.0001, warm_start=False, 
+    positive=False)
+# LRmodel=LinearRegression(
+#     fit_intercept=False, 
+#     normalize=False, 
+#     copy_X=True)
+
+# Ridge = RidgeCV(alphas=alphas, normalize=True, cv=5)
+
+####################################################################################
+#fit blender using validation set
+enet_mod=enet.fit(X_valid,Y_valid)
+#save model along with holdout set performance measure
+#average over holdout set predictions
+X_holdout/=np.float(n_folds-1)
+pred_holdout=enet_mod.predict(X_holdout)
+#generate OOS performance measure on holdout set
+blender_rmse_enet.append([enet_mod,rmse_log(holdout_Y,pred_holdout)])
+#test set predictions
+X_test/=np.float(n_folds-1)
+#use elastic net model for ensembling
+# y_test_enet[:,i]=enet_mod.predict(X_test)
+#take the mean of models for ensembling
+# y_test_avg[:,i]=X_test.mean(1)
+
 
 
 
