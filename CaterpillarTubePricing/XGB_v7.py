@@ -348,7 +348,7 @@ for i in range(n_folds):
 
     temp=ensembler(param,num_round,num_tree_RF,num_tree_ET,train_X,train_Y,
             test_X,valid_X,valid_Y,holdout_X,holdout_Y,ind_valid,ind_holdout)
-    
+
     if ind_holdout==1:
         y_holdout_folds[:,i]=temp[1]
         summary.append((temp[2],temp[3],temp[4]))
