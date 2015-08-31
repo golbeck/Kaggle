@@ -99,7 +99,7 @@ sz = dfx.shape
 ind_valid=1
 #enter 1 to use a holdout set
 ind_holdout=1
-n_folds=8
+n_folds=1
 list_sets=[]
 assembly_ids=dfx['tube_assembly_id'].unique()
 if ind_valid==1:
@@ -107,7 +107,7 @@ if ind_valid==1:
     holdout_indices=[]
     if ind_holdout==1:
         #generate holdout set
-        frac=0.05
+        frac=0.001
         n_holdout=int(frac*sz[0])
         n_temp=0
         while n_temp<n_holdout:
@@ -118,7 +118,7 @@ if ind_valid==1:
 
     for i in range(n_folds):
         #generate validation set
-        frac=0.075
+        frac=0.05
         n_valid=int(frac*sz[0])
 
         n_temp=0
@@ -167,11 +167,12 @@ dfx1=pd.io.parsers.read_table('X_train_143.csv',sep=',',header=False)
 dfx.drop('tube_assembly_id',axis=1, inplace=True)
 dfx1.drop('tube_assembly_id',axis=1, inplace=True)
 
-num_round_vec=[6000,2000]
+num_round_vec=[4500,3000,1500]
 
 num_tree_RF=800
 num_tree_ET=500
 
+eta_vec=[0.005,0.02,0.01,0.02,0.005,0.01,0.01,0.02,0.005]
 y_pow_vec=[16.0,16.0,16.0,16.0,16.0,16.0,16.0,16.0,16.0]
 log_ind_vec=[0,1,0,0,0,0,1,1,1]
 min_child_weight=[6,6,40,1,10,40,6,20,30]
@@ -245,7 +246,7 @@ for i in range(n_folds):
                 # scale weight of positive examples
 
                 param["objective"] = "reg:linear"
-                param["eta"] = 0.01
+                param["eta"] = eta_vec[k]
                 param["min_child_weight"] = min_child_weight[k]
                 param["subsample"] = subsample[k]
                 param["colsample_bytree"] = colsample_bytree[k]
@@ -321,7 +322,7 @@ for i in range(n_folds):
                 # scale weight of positive examples
 
                 param["objective"] = "reg:linear"
-                param["eta"] = 0.02
+                param["eta"] = eta_vec[k]
                 param["min_child_weight"] = min_child_weight1[k]
                 param["subsample"] = subsample1[k]
                 param["colsample_bytree"] = colsample_bytree1[k]
