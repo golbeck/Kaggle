@@ -227,7 +227,7 @@ df1=pd.concat([df_train_set,df_month_train],axis=1)
 #remove supplier, tube_assembly_id
 df1.drop('quote_date', axis=1, inplace=True)
 # df1.drop("supplier", axis=1, inplace=True)
-df1.drop("tube_assembly_id", axis=1, inplace=True)
+# df1.drop("tube_assembly_id", axis=1, inplace=True)
 df1['bracket_pricing']=pd.Categorical(df1['bracket_pricing']).labels
 
 del df_train_set, df_month_train, df_tube
@@ -250,8 +250,35 @@ df2['bracket_pricing']=pd.Categorical(df2['bracket_pricing']).labels
 
 del df_test_set, df_month_test
 
+
+
+##########################################################################################
+##########################################################################################
+##########################################################################################
+# include interactions and quadratic term to generate cross-sectional area and tube volume
+df1['diameter2']=(df1['diameter']**2.0)
+df2['diameter2']=(df2['diameter']**2.0)
+df1['length2']=(df1['length']**2.0)
+df2['length2']=(df2['length']**2.0)
+df1['wall2']=df1['wall']**2.0
+df2['wall2']=df2['wall']**2.0
+# df1['bend_radius2']=df1['bend_radius']**2.0
+# df2['bend_radius2']=df2['bend_radius']**2.0
+
+df1['diam_wall']=df1['diameter']*df1['wall']
+df2['diam_wall']=df2['diameter']*df2['wall']
+df1['length_diam']=df1['length']*df1['diameter']
+df2['length_diam']=df2['length']*df2['diameter']
+df1['length_diam2']=df1['length']*(df1['diameter']**2.0)
+df2['length_diam2']=df2['length']*(df2['diameter']**2.0)
+df1['length_wall']=df1['length']*df1['wall']
+df2['length_wall']=df2['length']*df2['wall']
+
+##########################################################################################
+##########################################################################################
+##########################################################################################
 Y_train.to_csv("Y_train.csv",header=True,index=False)
 df1.fillna(0, inplace = True)
 df2.fillna(0, inplace = True)
-df1.to_csv("X_train.csv",header=True,index=False)
-df2.to_csv("X_test.csv",header=True,index=False)
+df1.to_csv("X_train_143.csv",header=True,index=False)
+df2.to_csv("X_test_143.csv",header=True,index=False)

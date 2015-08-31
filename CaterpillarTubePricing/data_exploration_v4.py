@@ -16,13 +16,6 @@ import theano.tensor as T
 import xgboost as xgb
 
 
-# pwd_temp=os.getcwd()
-# # dir1='/home/sgolbeck/workspace/Kaggle/CaterpillarTubePricing'
-# dir1='/home/golbeck/Workspace/Kaggle/CaterpillarTubePricing'
-# dir1=dir1+'/data' 
-# if pwd_temp!=dir1:
-#     os.chdir(dir1)
-
 #training set
 df_train_set=pd.io.parsers.read_table('train_set.csv',sep=',',header=0)
 Y_train=df_train_set['cost']
@@ -189,15 +182,30 @@ del df_test_set, df_month_test
 
 
 # include interactions and quadratic term to generate cross-sectional area and tube volume
-df1['area']=(df1['diameter']**2.0)
-df1['volume']=df1['length']*df1['area']
-df2['area']=(df2['diameter']**2.0)
-df2['volume']=df2['length']*df2['area']
+df1['diameter2']=(df1['diameter']**2.0)
+df2['diameter2']=(df2['diameter']**2.0)
+df1['length2']=(df1['length']**2.0)
+df2['length2']=(df2['length']**2.0)
+df1['wall2']=df1['wall']**2.0
+df2['wall2']=df2['wall']**2.0
+# df1['bend_radius2']=df1['bend_radius']**2.0
+# df2['bend_radius2']=df2['bend_radius']**2.0
 
-df1['tube_mat_area']=(0.5*df1['diameter'])**2.0-(0.5*df1['diameter']-df1['wall'])**2.0
-df1['tube_mat_vol']=df1['tube_mat_area']*df1['length']
-df2['tube_mat_area']=(0.5*df2['diameter'])**2.0-(0.5*df2['diameter']-df2['wall'])**2.0
-df2['tube_mat_vol']=df2['tube_mat_area']*df2['length']
+df1['diam_wall']=df1['diameter']*df1['wall']
+df2['diam_wall']=df2['diameter']*df2['wall']
+df1['length_diam']=df1['length']*df1['diameter']
+df2['length_diam']=df2['length']*df2['diameter']
+df1['length_diam2']=df1['length']*(df1['diameter']**2.0)
+df2['length_diam2']=df2['length']*(df2['diameter']**2.0)
+df1['length_wall']=df1['length']*df1['wall']
+df2['length_wall']=df2['length']*df2['wall']
+
+# df1['volume']=df1['length']*df1['area']
+# df2['volume']=df2['length']*df2['area']
+# df1['tube_mat_area']=(0.5*df1['diameter'])**2.0-(0.5*df1['diameter']-df1['wall'])**2.0
+# df1['tube_mat_vol']=df1['tube_mat_area']*df1['length']
+# df2['tube_mat_area']=(0.5*df2['diameter'])**2.0-(0.5*df2['diameter']-df2['wall'])**2.0
+# df2['tube_mat_vol']=df2['tube_mat_area']*df2['length']
 
 Y_train.to_csv("Y_train.csv",header=True,index=False)
 df1.to_csv("X_train.csv",header=True,index=False)
