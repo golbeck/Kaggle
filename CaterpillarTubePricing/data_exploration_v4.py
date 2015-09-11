@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import theano
 import theano.tensor as T
-
+from math import isnan
 import xgboost as xgb
 
 
@@ -29,6 +29,67 @@ df_bill_of_materials=pd.io.parsers.read_table('bill_of_materials.csv',sep=',',he
 df_components=pd.io.parsers.read_table('components.csv',sep=',',header=0)
 df_specs=pd.io.parsers.read_table('specs.csv',sep=',',header=0)
 df_tube=pd.io.parsers.read_table('tube.csv',sep=',',header=0)
+
+# df_type_component=pd.io.parsers.read_table('type_component.csv',sep=',',header=0)
+# df_type_connection=pd.io.parsers.read_table('type_connection.csv',sep=',',header=0)
+# df_tube_end_form=pd.io.parsers.read_table('tube_end_form.csv',sep=',',header=0)
+# df_type_end_form=pd.io.parsers.read_table('type_end_form.csv',sep=',',header=0)
+# df_comp_tee=pd.io.parsers.read_table('comp_tee.csv',sep=',',header=0)
+# df_comp_threaded=pd.io.parsers.read_table('comp_threaded.csv',sep=',',header=0)
+# df_comp_adaptor=pd.io.parsers.read_table('comp_adaptor.csv',sep=',',header=0)
+# df_comp_boss=pd.io.parsers.read_table('comp_boss.csv',sep=',',header=0)
+# df_comp_elbow=pd.io.parsers.read_table('comp_elbow.csv',sep=',',header=0)
+# df_comp_float=pd.io.parsers.read_table('comp_float.csv',sep=',',header=0)
+# df_comp_hfl=pd.io.parsers.read_table('comp_hfl.csv',sep=',',header=0)
+# df_comp_nut=pd.io.parsers.read_table('comp_nut.csv',sep=',',header=0)
+# df_comp_other=pd.io.parsers.read_table('comp_other.csv',sep=',',header=0)
+# df_comp_sleeve=pd.io.parsers.read_table('comp_sleeve.csv',sep=',',header=0)
+# df_comp_straight=pd.io.parsers.read_table('comp_straight.csv',sep=',',header=0)
+
+df_list=['comp_tee.csv','comp_threaded.csv','comp_adaptor.csv','comp_boss.csv','comp_elbow.csv',
+    'comp_float.csv','comp_hfl.csv','comp_nut.csv','comp_other.csv','comp_sleeve.csv','comp_straight.csv']
+
+comp_id=[]
+comp_weight=[]
+comp_unique_feat=[]
+
+for df_item in df_list:
+    df_temp=pd.io.parsers.read_table(df_item,sep=',',header=0)
+    df_temp.fillna(0, inplace = True)
+    comp_id+=list(df_temp['component_id'])
+    comp_weight+=list(df_temp['weight'])
+    if 'unique_feature' in df_temp.columns:
+        comp_unique_feat+=list(df_temp['unique_feature'])
+    else:
+        temp=['No' for i in range(df_temp.shape[0])]
+        comp_unique_feat+=list(temp)
+
+df_comp_weight = dict(zip(comp_id, comp_weight))
+df_comp_unique = dict(zip(comp_id, comp_unique_feat))
+
+# df_comp_weight = {k: df_comp_weight[k] for k in df_comp_weight if not isnan(df_comp_weight[k])}
+# df_comp_unique = {k: df_comp_unique[k] for k in df_comp_unique if not isnan(df_comp_unique[k])}
+
+# df_comp_feat=pd.DataFrame()
+# df_comp_feat['component_id']=comp_id
+# df_comp_feat['weight']=comp_weight
+# df_comp_feat['unique_feature']=comp_unique_feat
+
+tube_weight_list=[]
+
+for ind in range(df_bill_of_materials.shape[0]):
+    ii=1
+    W=0.0
+    while  isinstance(df_bill_of_materials.ix[ind,ii], str):
+        comp_id=df_bill_of_materials.ix[ind,ii]
+        quantity=df_bill_of_materials.ix[ind,ii+1]
+        W+=df_comp_weight[comp_id]*quantity
+        ii+=2
+        if ii>15:
+            break
+    tube_weight_list.append(W)
+
+
 ##########################################################################################
 ##########################################################################################
 #generate dictionary using components csv file. 
@@ -39,6 +100,7 @@ for ind in range(df_components.shape[0]):
 
 comp_type_unique=list(set(comp_type.values()))
 comp_type_unique.sort()
+
 ##########################################################################################
 ##########################################################################################
 #generate a separate encoding for each component type in the bill of materials
