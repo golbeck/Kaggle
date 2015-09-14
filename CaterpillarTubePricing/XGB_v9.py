@@ -162,7 +162,8 @@ else:
 
 dfx.drop('tube_assembly_id',axis=1, inplace=True)
 
-num_round_vec=[4500,3000,1500]
+# num_round_vec=[4500,3000,1500]
+num_round_vec=[5000]
 
 #model ranking (by rmse): 2,4,5,1,6,3,0
 y_pow_vec=[16.0,16.0,16.0,16.0,16.0,16.0,16.0,16.0,16.0]
@@ -172,7 +173,8 @@ subsample=[0.7,0.7,0.5,0.9,0.5,0.8,0.5,0.8,0.6]
 colsample_bytree=[0.6,0.6,0.5,0.9,0.5,0.8,0.5,0.8,0.6]
 max_depth=[8,8,5,30,12,5,15,8,6]
 
-models=[0,1,3,4,7,8]
+# models=[0,1,3,4,7,8]
+models=[0,8]
 n_models=len(models)
 n_round=len(num_round_vec)
 

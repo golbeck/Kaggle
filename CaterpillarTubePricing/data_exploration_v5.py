@@ -14,7 +14,13 @@ import theano
 import theano.tensor as T
 from math import isnan
 import xgboost as xgb
-
+##############################################################################################################
+##############################################################################################################
+def is_subseq(x, y):
+    it = iter(y)
+    return all(any(c == ch for c in it) for ch in x)
+##############################################################################################################
+##############################################################################################################
 
 #training set
 df_train_set=pd.io.parsers.read_table('train_set.csv',sep=',',header=0)
@@ -45,6 +51,8 @@ df_tube=pd.io.parsers.read_table('tube.csv',sep=',',header=0)
 # df_comp_other=pd.io.parsers.read_table('comp_other.csv',sep=',',header=0)
 # df_comp_sleeve=pd.io.parsers.read_table('comp_sleeve.csv',sep=',',header=0)
 # df_comp_straight=pd.io.parsers.read_table('comp_straight.csv',sep=',',header=0)
+##############################################################################################################
+##############################################################################################################
 
 df_list=['comp_tee.csv','comp_threaded.csv','comp_adaptor.csv','comp_boss.csv','comp_elbow.csv',
     'comp_float.csv','comp_hfl.csv','comp_nut.csv','comp_other.csv','comp_sleeve.csv','comp_straight.csv']
@@ -53,6 +61,8 @@ comp_id=[]
 comp_weight=[]
 comp_unique_feat=[]
 comp_csv_cat=[]
+comp_orientation=[]
+comp_groove=[]
 
 for df_item in df_list:
     df_temp=pd.io.parsers.read_table(df_item,sep=',',header=0)
@@ -65,6 +75,20 @@ for df_item in df_list:
     else:
         temp=['No' for i in range(df_temp.shape[0])]
         comp_unique_feat+=list(temp)
+
+
+    if 'orientation' in df_temp.columns:
+        comp_orientation+=list(df_temp['orientation'])
+    else:
+        temp=['No' for i in range(df_temp.shape[0])]
+        comp_orientation+=list(temp)
+
+
+    if 'groove' in df_temp.columns:
+        comp_groove+=list(df_temp['groove'])
+    else:
+        temp=['No' for i in range(df_temp.shape[0])]
+        comp_groove+=list(temp)
 
 df_comp_weight = dict(zip(comp_id, comp_weight))
 df_comp_unique = dict(zip(comp_id, comp_unique_feat))
@@ -80,6 +104,18 @@ cat_names=list(set(df_comp_csv_cat.values()))
 for i in range(len(cat_names)):
     df_bill_of_materials[str(cat_names[i])]=np.zeros(df_bill_of_materials.shape[0])
 
+
+#convert strings to numerical encoding
+# lbl = preprocessing.LabelEncoder()
+# lbl.fit(list(comp_orientation))
+# comp_orientation=lbl.transform(comp_orientation)
+df_comp_orientation = dict(zip(comp_id, comp_orientation))
+#convert strings to numerical encoding
+# lbl = preprocessing.LabelEncoder()
+# lbl.fit(list(comp_groove))
+# comp_groove=lbl.transform(comp_groove)
+df_comp_groove = dict(zip(comp_id, comp_groove))
+
 # df_comp_weight = {k: df_comp_weight[k] for k in df_comp_weight if not isnan(df_comp_weight[k])}
 # df_comp_unique = {k: df_comp_unique[k] for k in df_comp_unique if not isnan(df_comp_unique[k])}
 
@@ -90,10 +126,14 @@ for i in range(len(cat_names)):
 
 tube_weight_list=[]
 tube_unique_feat_list=[]
+tube_orientation_list=[]
+tube_groove_list=[]
 for ind in range(df_bill_of_materials.shape[0]):
     ii=1
     W=0.0
     unique_feat_sum=0
+    orientation_sum=0
+    groove_sum=0
     while  isinstance(df_bill_of_materials.ix[ind,ii], str):
         mat_comp_id=df_bill_of_materials.ix[ind,ii]
         quantity=df_bill_of_materials.ix[ind,ii+1]
@@ -102,8 +142,14 @@ for ind in range(df_bill_of_materials.shape[0]):
             df_bill_of_materials.ix[ind,comp_cat]+=1
             #generate the weights
             W+=df_comp_weight[mat_comp_id]*quantity
+
             if df_comp_unique[mat_comp_id]=='Yes':
                 unique_feat_sum+=1
+            if df_comp_orientation[mat_comp_id]=='Yes':
+                orientation_sum+=1
+            if df_comp_groove[mat_comp_id]=='Yes':
+                groove_sum+=1
+
             ii+=2
             if ii>15:
                 break
@@ -113,56 +159,18 @@ for ind in range(df_bill_of_materials.shape[0]):
             break
     tube_weight_list.append(W)
     tube_unique_feat_list.append(unique_feat_sum)
+    tube_orientation_list.append(orientation_sum)
+    tube_groove_list.append(groove_sum)
 
 df_bill_of_materials['weight']=tube_weight_list
 df_bill_of_materials['unique_feat']=tube_unique_feat_list
+df_bill_of_materials['orientation']=tube_orientation_list
+df_bill_of_materials['groove']=tube_groove_list
 
 
 ##########################################################################################
 ##########################################################################################
-# #generate dictionary using components csv file. 
-# #Each component (over 2000) is assigned a type (29 total)
-# comp_type={}
-# for ind in range(df_components.shape[0]):
-#     comp_type[df_components.ix[ind,0]]=df_components.ix[ind,2]
 
-# comp_type_unique=list(set(comp_type.values()))
-# comp_type_unique.sort()
-
-##########################################################################################
-##########################################################################################
-# #generate a separate encoding for each component type in the bill of materials
-# for ind in range(df_bill_of_materials.shape[0]):
-#     ii=1
-#     while  isinstance(df_bill_of_materials.ix[ind,ii], str):
-#         df_bill_of_materials.ix[ind,ii]=comp_type[df_bill_of_materials.ix[ind,ii]]
-#         ii+=2
-#         if ii>15:
-#             break
-
-df_bill_of_materials.fillna(0, inplace = True)
-
-# for j in [2*i+1 for i in range(8)]:
-#     lbl = preprocessing.LabelEncoder()
-#     lbl.fit(list(df_bill_of_materials[df_bill_of_materials.columns[j]]))
-#     df_bill_of_materials.ix[:,j]=lbl.transform(df_bill_of_materials.ix[:,j])
-
-
-# mat_list=[]
-# for j in [2*i+1 for i in range(8)]:
-#     mat_list=mat_list+list(df_bill_of_materials[df_bill_of_materials.columns[j]])
-
-# lbl = preprocessing.LabelEncoder()
-# lbl.fit(mat_list)
-
-# for j in [2*i+1 for i in range(8)]:
-#     df_bill_of_materials.ix[:,j]=lbl.transform(df_bill_of_materials.ix[:,j])
-
-
-df_bill_of_materials.drop(df_bill_of_materials.columns[range(1,17)], axis=1, inplace=True)
-#merge with train and test sets
-df_train_set=pd.merge(df_train_set, df_bill_of_materials, on ='tube_assembly_id')
-df_test_set=pd.merge(df_test_set, df_bill_of_materials, on ='tube_assembly_id')
 
 
 ##########################################################################################
@@ -387,6 +395,15 @@ for i in range(n):
 # tube_specs_unique=list(set(temp))
 # tube_specs_unique.sort()
 
+
+
+df_bill_of_materials.fillna(0, inplace = True)
+df_bill_of_materials.drop(df_bill_of_materials.columns[range(1,17)], axis=1, inplace=True)
+#merge with train and test sets
+df_train_set=pd.merge(df_train_set, df_bill_of_materials, on ='tube_assembly_id')
+df_test_set=pd.merge(df_test_set, df_bill_of_materials, on ='tube_assembly_id')
+
+
 del df_train_set, df_month_train, df_tube
 
 # df1.drop("tube_assembly_id", axis=1, inplace=True)
@@ -415,10 +432,14 @@ df1['diam_wall']=df1['diameter']*df1['wall']
 df2['diam_wall']=df2['diameter']*df2['wall']
 df1['length_diam']=df1['length']*df1['diameter']
 df2['length_diam']=df2['length']*df2['diameter']
-df1['length_diam2']=df1['length']*(df1['diameter']**2.0)
-df2['length_diam2']=df2['length']*(df2['diameter']**2.0)
 df1['length_wall']=df1['length']*df1['wall']
 df2['length_wall']=df2['length']*df2['wall']
+df1['length_diam2']=df1['length']*(df1['diameter']**2.0)
+df2['length_diam2']=df2['length']*(df2['diameter']**2.0)
+df1['length_wall2']=df1['length']*(df1['wall']**2.0)
+df2['length_wall2']=df2['length']*(df2['wall']**2.0)
+df1['diam_length_wall']=df1['diameter']*df1['length']*df1['wall']
+df2['diam_length_wall']=df2['diameter']*df2['length']*df2['wall']
 
 # df1['volume']=df1['length']*df1['area']
 # df2['volume']=df2['length']*df2['area']
